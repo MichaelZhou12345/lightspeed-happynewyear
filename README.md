@@ -36,17 +36,17 @@ npm run dev
 ### 1. 准备照片
 找到项目目录下的 public/photos/ 文件夹。
 
-顶端大图/封面图：命名为 top.jpg（将显示在树顶的立体五角星上）。
+顶端大图/封面图：命名为 top.JPG（将显示在树顶的立体五角星上）。
 
-树身照片：命名为 1.jpg, 2.jpg, 3.jpg ... 依次类推。
+树身照片：命名为 1.JPG, 2.JPG, 3.JPG ... 依次类推。
 
 建议：使用正方形或 4:3 比例的图片，文件大小不宜过大（建议单张 500kb 以内以保证流畅度）
 ### 2. 替换照片
-直接将你自己的照片复制到 public/photos/ 文件夹中，覆盖原有的图片即可。请保持文件名格式不变（1.jpg, 2.jpg 等）。
+直接将你自己的照片复制到 public/photos/ 文件夹中，覆盖原有的图片即可。请保持文件名格式不变（1.JPG, 2.JPG 等）。
 ### 3. 修改照片数量 (增加或减少)
 如果你放入了更多照片（例如从默认的 31 张增加到 100 张），需要修改代码以通知程序加载它们。
 打开文件：src/App.tsx
-找到大约 第 19 行 的代码：// --- 动态生成照片列表 (top.jpg + 1.jpg 到 31.jpg) ---
+找到大约 第 19 行 的代码：// --- 动态生成照片列表 (top.JPG + 1.JPG 到 31.JPG) ---
 const TOTAL_NUMBERED_PHOTOS = 31; // <--- 修改这个数字！
 ### 🖐️ 手势控制说明
 * **本项目内置了 AI 手势识别系统，请站在摄像头前进行操作（屏幕右下角有 DEBUG 按钮可查看摄像头画面）**：
@@ -69,4 +69,3 @@ const TOTAL_NUMBERED_PHOTOS = 31; // <--- 修改这个数字！
 ### 📄 License
 MIT License. Feel free to use and modify for your own holiday celebrations!
 ### Merry Christmas! 🎄✨
-
