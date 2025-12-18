@@ -1576,102 +1576,167 @@ const NebulaBackground = () => {
   );
 };
 
-// --- Component: Shooting Star (流星) ---
+// --- Component: Shooting Star (流星) - CSS风格渐变线条 + 模糊光晕 ---
 const ShootingStar = ({ 
   startPos, 
-  direction, 
   speed, 
-  length, 
+  length,
   color,
   delay,
   state 
 }: { 
   startPos: THREE.Vector3;
-  direction: THREE.Vector3;
   speed: number;
   length: number;
-  color: THREE.Color;
+  color: string;
   delay: number;
   state: 'CHAOS' | 'FORMED';
 }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const trailRef = useRef<THREE.Line>(null);
-  const progress = useRef(-delay); // 负值表示延迟
-  const lifespan = 2.5; // 流星生命周期
+  const groupRef = useRef<THREE.Group>(null);
+  const progress = useRef(-delay);
+  const lifespan = 2;
   
-  // 创建流星尾巴的几何体
-  const trailGeometry = useMemo(() => {
-    const points = [];
-    for (let i = 0; i < 20; i++) {
-      points.push(new THREE.Vector3(0, 0, -i * (length / 20)));
+  // 创建流星纹理 - 右边亮（头部），左边透明（尾部）
+  const meteorTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 8;
+    const ctx = canvas.getContext('2d')!;
+    
+    // 渐变方向：左边透明（尾部） -> 右边亮（头部）
+    const gradient = ctx.createLinearGradient(0, 0, 256, 0);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');      // 尾部透明
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');  // 渐亮
+    gradient.addColorStop(0.9, color);                        // 颜色
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');      // 头部最亮
+    
+    // 纵向柔和边缘
+    for (let y = 0; y < 8; y++) {
+      const dist = Math.abs(y - 4) / 4;
+      const alpha = 1 - dist * dist;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, y, 256, 1);
     }
-    return new THREE.BufferGeometry().setFromPoints(points);
-  }, [length]);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, [color]);
+  
+  // 模糊光晕纹理
+  const glowTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d')!;
+    
+    const gradient = ctx.createLinearGradient(0, 0, 256, 0);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.2)');
+    gradient.addColorStop(0.9, color);
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0.8)');
+    
+    for (let y = 0; y < 32; y++) {
+      const dist = Math.abs(y - 16) / 16;
+      const alpha = Math.pow(1 - dist, 2) * 0.5;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, y, 256, 1);
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+  }, [color]);
   
   useFrame((_, delta) => {
-    if (!meshRef.current || !trailRef.current) return;
+    if (!groupRef.current) return;
     const isFormed = state === 'FORMED';
     
     if (isFormed) {
       progress.current += delta * speed;
       
       if (progress.current > lifespan) {
-        progress.current = -Math.random() * 3; // 随机延迟后重新开始
+        progress.current = -Math.random() * 4 - 1;
       }
       
       if (progress.current < 0) {
-        meshRef.current.visible = false;
-        trailRef.current.visible = false;
+        groupRef.current.visible = false;
         return;
       }
       
-      meshRef.current.visible = true;
-      trailRef.current.visible = true;
+      groupRef.current.visible = true;
       
       const t = progress.current / lifespan;
-      const currentPos = startPos.clone().add(direction.clone().multiplyScalar(t * 800));
       
-      meshRef.current.position.copy(currentPos);
-      trailRef.current.position.copy(currentPos);
+      // 从右上到左下移动
+      const moveDistance = t * 500;
+      const currentPos = startPos.clone();
+      currentPos.x -= moveDistance * 0.6;
+      currentPos.y -= moveDistance * 0.8;
       
-      // 让尾巴朝向运动方向
-      trailRef.current.lookAt(currentPos.clone().add(direction));
+      groupRef.current.position.copy(currentPos);
       
       // 淡入淡出
       const fade = t < 0.1 ? t / 0.1 : t > 0.8 ? (1 - t) / 0.2 : 1;
-      const mat = meshRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = fade * 0.9;
       
-      const trailMat = trailRef.current.material as THREE.LineBasicMaterial;
-      trailMat.opacity = fade * 0.6;
+      groupRef.current.children.forEach(child => {
+        if ((child as THREE.Mesh).material) {
+          const mat = (child as THREE.Mesh).material as THREE.MeshBasicMaterial;
+          mat.opacity = fade * (child.userData.isGlow ? 0.6 : 0.9);
+        }
+      });
     } else {
-      meshRef.current.visible = false;
-      trailRef.current.visible = false;
+      groupRef.current.visible = false;
     }
   });
   
+  // 流星倾斜角度 - 头朝左下，尾朝右上
+  // 运动方向是(-0.6, -0.8)，流星body要沿着这个方向
+  // 角度 = atan2(-0.8, -0.6) + PI = 约233度，但我们要让纹理的左边（亮头）朝向运动方向
+  const angle = Math.atan2(-0.8, -0.6); // 约 -126度 = -2.21弧度
+  
   return (
-    <group>
-      {/* 流星头部 */}
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[1.5, 8, 8]} />
+    <group ref={groupRef}>
+      {/* 主线条 */}
+      <mesh rotation={[0, 0, angle]}>
+        <planeGeometry args={[length, 1.5]} />
         <meshBasicMaterial 
-          color={color} 
-          transparent 
-          opacity={0} 
+          map={meteorTexture}
+          transparent
+          opacity={0}
           blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
-      {/* 流星尾巴 */}
-      <line ref={trailRef as any} geometry={trailGeometry}>
-        <lineBasicMaterial 
-          color={color} 
-          transparent 
-          opacity={0} 
+      
+      {/* 模糊光晕层1 */}
+      <mesh rotation={[0, 0, angle]} userData={{ isGlow: true }}>
+        <planeGeometry args={[length, 4]} />
+        <meshBasicMaterial 
+          map={glowTexture}
+          transparent
+          opacity={0}
           blending={THREE.AdditiveBlending}
-          linewidth={2}
+          side={THREE.DoubleSide}
+          depthWrite={false}
         />
-      </line>
+      </mesh>
+      
+      {/* 模糊光晕层2 */}
+      <mesh rotation={[0, 0, angle]} userData={{ isGlow: true }}>
+        <planeGeometry args={[length, 8]} />
+        <meshBasicMaterial 
+          map={glowTexture}
+          transparent
+          opacity={0}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
     </group>
   );
 };
@@ -1679,47 +1744,30 @@ const ShootingStar = ({
 // --- Component: Shooting Stars System (流星群) ---
 const ShootingStars = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const meteors = useMemo(() => {
-    const count = 15; // 流星数量
-    return Array.from({ length: count }, (_, i) => {
-      // 随机起始位置 - 从屏幕边缘开始
-      const side = Math.random();
-      let startPos: THREE.Vector3;
-      let direction: THREE.Vector3;
-      
-      if (side < 0.25) {
-        // 从左上方
-        startPos = new THREE.Vector3(-400 - Math.random() * 200, 200 + Math.random() * 200, -100 + Math.random() * 200);
-        direction = new THREE.Vector3(1, -0.5 - Math.random() * 0.3, 0.2).normalize();
-      } else if (side < 0.5) {
-        // 从右上方
-        startPos = new THREE.Vector3(400 + Math.random() * 200, 200 + Math.random() * 200, -100 + Math.random() * 200);
-        direction = new THREE.Vector3(-1, -0.5 - Math.random() * 0.3, 0.2).normalize();
-      } else if (side < 0.75) {
-        // 从顶部
-        startPos = new THREE.Vector3(-200 + Math.random() * 400, 350 + Math.random() * 100, -150 + Math.random() * 300);
-        direction = new THREE.Vector3(0.3 - Math.random() * 0.6, -1, 0.1).normalize();
-      } else {
-        // 从后方斜向前
-        startPos = new THREE.Vector3(-300 + Math.random() * 600, 150 + Math.random() * 200, -400);
-        direction = new THREE.Vector3(0.2 - Math.random() * 0.4, -0.3, 1).normalize();
-      }
-      
-      // 流星颜色 - 白色、淡蓝、淡黄
-      const colors = [
-        new THREE.Color('#FFFFFF'),
-        new THREE.Color('#E0F4FF'),
-        new THREE.Color('#FFFACD'),
-        new THREE.Color('#87CEEB'),
-        new THREE.Color('#FFE4B5'),
-      ];
+    // 流星配置 - 从右上方不同位置出发
+    const configs = [
+      { x: 0, y: 0, d: 1, color: '#7DF9FF' },   // 青色
+      { x: 80, y: 30, d: 2, color: '#ffffff' },
+      { x: 160, y: -20, d: 3, color: '#ffffff' },
+      { x: 50, y: 60, d: 1.5, color: '#B0E0E6' }, // 粉蓝
+      { x: 120, y: 80, d: 2.5, color: '#ffffff' },
+      { x: 200, y: 40, d: 3.5, color: '#E0FFFF' }, // 蓝白
+    ];
+    
+    return configs.map((cfg, idx) => {
+      // 起始位置在右上方
+      const startPos = new THREE.Vector3(
+        100 + cfg.x,      // 右侧
+        200 + cfg.y,      // 上方
+        -50 + idx * 10    // 不同深度
+      );
       
       return {
         startPos,
-        direction,
-        speed: 0.4 + Math.random() * 0.6,
-        length: 30 + Math.random() * 50,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        delay: Math.random() * 5, // 随机延迟
+        speed: 0.5 + Math.random() * 0.3,
+        length: 60 + Math.random() * 40,
+        color: cfg.color,
+        delay: cfg.d + idx * 0.8,
       };
     });
   }, []);
@@ -1730,7 +1778,6 @@ const ShootingStars = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         <ShootingStar
           key={i}
           startPos={meteor.startPos}
-          direction={meteor.direction}
           speed={meteor.speed}
           length={meteor.length}
           color={meteor.color}
