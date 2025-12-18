@@ -334,20 +334,8 @@ const createCinematicPlanetTexture = (
   const imageData = ctx.getImageData(0, 0, resolution, resolution);
   const data = imageData.data;
   
-  const centerX = resolution / 2;
-  const centerY = resolution / 2;
-  const radius = resolution / 2;
-  
-  // ========== NASA风格光照系统 ==========
-  // 光照方向：左上方太阳光，角度更平缓以产生大面积昼面
-  const lightDir = { x: -0.55, y: -0.45, z: 0.70 };
-  const lightLen = Math.sqrt(lightDir.x ** 2 + lightDir.y ** 2 + lightDir.z ** 2);
-  lightDir.x /= lightLen;
-  lightDir.y /= lightLen;
-  lightDir.z /= lightLen;
-  
   // 根据行星类型定义颜色调色板 - 提升基础亮度40%
-  const getColorPalette = (planetType: typeof type, hue: number) => {
+  const getColorPalette = (planetType: typeof type, _hue: number) => {
     // 亮度提升系数
     const brightnessBoost = 1.4;
     const clampColor = (v: number) => Math.min(255, v * brightnessBoost);
@@ -420,255 +408,175 @@ const createCinematicPlanetTexture = (
   
   const palette = getColorPalette(type, baseHue);
   
+  // 简单的伪随机噪声函数（用于增加质感）
+  const simpleNoise = (x: number, y: number, noiseSeed: number) => {
+    const n = Math.sin(x * 12.9898 + y * 78.233 + noiseSeed) * 43758.5453;
+    return n - Math.floor(n);
+  };
+  
+  // 使用等距柱状投影 - 整个矩形纹理，无圆形裁剪
   for (let py = 0; py < resolution; py++) {
     for (let px = 0; px < resolution; px++) {
       const i = (py * resolution + px) * 4;
       
-      const dx = (px - centerX) / radius;
-      const dy = (py - centerY) / radius;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      // 球体外部透明
-      if (dist > 1) {
-        data[i] = 0;
-        data[i + 1] = 0;
-        data[i + 2] = 0;
-        data[i + 3] = 0;
-        continue;
-      }
-      
-      // 球面法线计算
-      const nz = Math.sqrt(Math.max(0, 1 - dist * dist));
-      const nx = dx;
-      const ny = dy;
-      
-      // 球面UV坐标（用于纹理映射）
-      const theta = Math.atan2(ny, nx);
-      const phi = Math.acos(nz);
-      const u = (theta + Math.PI) / (2 * Math.PI);
-      const v = phi / Math.PI;
-      
-      // ========== NASA风格真实物理光照 ==========
-      // 兰伯特漫反射 - 产生大面积柔和的昼面
-      let diffuse = -(nx * lightDir.x + ny * lightDir.y + nz * lightDir.z);
-      diffuse = Math.max(0, diffuse);
-      
-      // 柔化光照过渡（使用更平滑的曲线，避免硬边）
-      // 使用 smoothstep 风格的过渡
-      diffuse = diffuse * diffuse * (3 - 2 * diffuse); // smoothstep
-      diffuse = Math.pow(diffuse, 0.6); // 进一步柔化
-      
-      // ========== 关键：大面积半球光照 ==========
-      // 昼面占据约半个球体，亮度柔和自然过渡
-      // 使用半球环境光确保整体明亮
-      const hemisphereLight = 0.45 + nz * 0.15; // 基础环境光大幅提升
-      
-      // 边缘光（菲涅尔效应）- 轻微的边缘增亮
-      const fresnel = Math.pow(1 - nz, 2.5) * 0.12;
-      
-      // ========== 关键：暗面保留纹理可见 ==========
-      // 最终光照强度 - 确保暗面也有足够亮度看到细节
-      // 暗面最低亮度提升到35%，确保纹理可见
-      let lighting = diffuse * 0.55 + hemisphereLight + fresnel;
-      lighting = Math.max(0.35, Math.min(1.15, lighting)); // 最暗35%，允许略微过曝
+      // UV坐标：u = 经度 (0-1), v = 纬度 (0-1)
+      const u = px / resolution;
+      const v = py / resolution;
       
       // ========== 行星表面纹理 ==========
       let r: number, g: number, b: number;
       
       if (type === 'gas_giant') {
-        // 气态巨行星 - 柔和水平条纹
-        const bandY = v * resolution;
-        const bandFreq = 0.03 + seededRandom(10) * 0.015;
-        const bandNoise = Math.sin(bandY * bandFreq) * 0.4 + 
-                          Math.sin(bandY * bandFreq * 2.1 + u * 6) * 0.2 +
-                          Math.sin(bandY * bandFreq * 3.5 + u * 3) * 0.1;
+        // 气态巨行星 - 类木星多层条纹 + 涡旋细节
+        const bandFreq = 0.025 + seededRandom(10) * 0.01;
         
-        // 柔和的大红斑（可选）
-        const spotU = 0.3 + seededRandom(11) * 0.4;
-        const spotV = 0.4 + seededRandom(12) * 0.2;
-        const spotDist = Math.sqrt((u - spotU) ** 2 + (v - spotV) ** 2);
-        const spotInfluence = spotDist < 0.1 ? Math.pow(1 - spotDist / 0.1, 2) * 0.3 : 0;
+        // 多层条纹叠加
+        const band1 = Math.sin(v * resolution * bandFreq) * 0.35;
+        const band2 = Math.sin(v * resolution * bandFreq * 2.3 + u * 0.5) * 0.2;
+        const band3 = Math.sin(v * resolution * bandFreq * 4.7) * 0.1;
+        const bandNoise = band1 + band2 + band3;
         
-        // 条纹颜色混合 - 更柔和
-        const bandMix = (bandNoise + 0.7) / 1.4; // 压缩范围
-        r = palette.primary.r * (1 - bandMix) + palette.secondary.r * bandMix;
-        g = palette.primary.g * (1 - bandMix) + palette.secondary.g * bandMix;
-        b = palette.primary.b * (1 - bandMix) + palette.secondary.b * bandMix;
+        // 经度方向的微小扰动（模拟大气流动）
+        const flowDistort = Math.sin(u * Math.PI * 8 + v * 20) * 0.03;
         
-        // 柔和的大红斑
-        if (spotInfluence > 0) {
-          r = r * (1 - spotInfluence) + 210 * spotInfluence;
-          g = g * (1 - spotInfluence) + 150 * spotInfluence;
-          b = b * (1 - spotInfluence) + 120 * spotInfluence;
+        const bandMix = (bandNoise + flowDistort + 0.65) / 1.3;
+        const clampedMix = Math.max(0.15, Math.min(0.85, bandMix));
+        
+        // 三色混合：primary, secondary, tertiary
+        const t = clampedMix;
+        if (t < 0.5) {
+          const localT = t * 2;
+          r = palette.primary.r * (1 - localT) + palette.secondary.r * localT;
+          g = palette.primary.g * (1 - localT) + palette.secondary.g * localT;
+          b = palette.primary.b * (1 - localT) + palette.secondary.b * localT;
+        } else {
+          const localT = (t - 0.5) * 2;
+          r = palette.secondary.r * (1 - localT) + palette.tertiary.r * localT;
+          g = palette.secondary.g * (1 - localT) + palette.tertiary.g * localT;
+          b = palette.secondary.b * (1 - localT) + palette.tertiary.b * localT;
         }
         
-        // 细节噪声 - 更柔和
-        const detail = fbm(px * 2, py * 0.5, 4) * 10;
-        r += detail;
-        g += detail * 0.9;
-        b += detail * 0.7;
+        // 细微噪点增加质感（只增亮，不变暗）
+        const detailNoise = simpleNoise(u * 50, v * 50, baseHue) * 8;
+        r += detailNoise;
+        g += detailNoise * 0.9;
+        b += detailNoise * 0.7;
         
       } else if (type === 'ice_giant') {
-        // 冰巨星 - 柔和的蓝色渐变
-        const cloudLayer = fbm(px, py, 4, 0.5) * 0.4 + 0.5;
-        const atmosphereBand = Math.sin(v * Math.PI * 6 + fbm(px * 0.4, py * 0.4, 3) * 1.5) * 0.1;
+        // 冰巨星 - 柔和的蓝色大气带 + 云层
+        const atmosphereBand = Math.sin(v * Math.PI * 8) * 0.12 + 
+                               Math.sin(v * Math.PI * 4 + u * 2) * 0.08 +
+                               Math.sin(v * Math.PI * 16) * 0.04;
         
-        // 柔和颜色渐变
-        const gradientMix = v * 0.4 + cloudLayer * 0.3;
-        r = palette.primary.r * (1 - gradientMix) + palette.secondary.r * gradientMix;
-        g = palette.primary.g * (1 - gradientMix) + palette.secondary.g * gradientMix;
-        b = palette.primary.b * (1 - gradientMix) + palette.secondary.b * gradientMix;
+        const gradientMix = v * 0.25 + 0.38 + atmosphereBand * 0.3;
+        const clampedGradient = Math.max(0.2, Math.min(0.8, gradientMix));
         
-        // 柔和大气带
-        r += atmosphereBand * 15;
-        g += atmosphereBand * 18;
-        b += atmosphereBand * 22;
+        r = palette.primary.r * (1 - clampedGradient) + palette.secondary.r * clampedGradient;
+        g = palette.primary.g * (1 - clampedGradient) + palette.secondary.g * clampedGradient;
+        b = palette.primary.b * (1 - clampedGradient) + palette.secondary.b * clampedGradient;
         
-        // 柔和云层高光
-        const cloudHighlight = Math.pow(cloudLayer, 2) * 15;
-        r += cloudHighlight;
-        g += cloudHighlight;
+        // 云层高光（只增亮）
+        const cloudHighlight = Math.max(0, Math.sin(u * Math.PI * 12 + v * 8)) * 15;
+        r += cloudHighlight * 0.7;
+        g += cloudHighlight * 0.85;
         b += cloudHighlight;
         
       } else if (type === 'rocky') {
-        // 岩石行星 - 柔和的高地/低地变化，淡化陨石坑
-        const surfaceRough = fbm(px, py, 4, 0.5);
-        const highlands = fbm(px * 0.5, py * 0.5, 3, 0.5);
+        // 岩石行星 - 陨石坑和地形变化
+        const latitudeMix = Math.sin(v * Math.PI) * 0.2 + 0.4;
         
-        // 基础岩石颜色 - 柔和的高地/低地变化
-        const rockMix = surfaceRough * 0.25 + highlands * 0.25 + 0.25;
-        r = palette.primary.r * (1 - rockMix) + palette.secondary.r * rockMix;
-        g = palette.primary.g * (1 - rockMix) + palette.secondary.g * rockMix;
-        b = palette.primary.b * (1 - rockMix) + palette.secondary.b * rockMix;
+        // 模拟地形起伏
+        const terrain1 = Math.sin(u * Math.PI * 6 + v * 4) * 0.1;
+        const terrain2 = Math.sin(u * Math.PI * 14 + v * 10) * 0.05;
+        const terrainMix = latitudeMix + terrain1 + terrain2;
         
-        // 高地轻微变亮
-        if (highlands > 0.55) {
-          const highlandBoost = (highlands - 0.55) * 20;
-          r += highlandBoost;
-          g += highlandBoost;
-          b += highlandBoost;
+        const clampedMix = Math.max(0.2, Math.min(0.8, terrainMix));
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        
+        // 陨石坑效果（环形亮斑）
+        const craterNoise = simpleNoise(u * 20, v * 20, baseHue);
+        if (craterNoise > 0.85) {
+          const craterRim = (craterNoise - 0.85) / 0.15 * 20;
+          r += craterRim;
+          g += craterRim;
+          b += craterRim;
         }
         
-        // 表面轻微纹理变化（非常柔和）
-        const roughness = (seededRandom(px * py) - 0.5) * 8;
-        r += roughness;
-        g += roughness;
-        b += roughness;
-        
       } else if (type === 'lava') {
-        // 熔岩行星 - 柔和暗色表面 + 发光裂缝
-        const crackPattern = fbm(px * 1.8, py * 1.8, 4, 0.5);
-        const lavaRiver = Math.sin(px * 0.04 + fbm(px, py, 2) * 2) * 0.5 + 0.5;
+        // 熔岩行星 - 暗色表面 + 发光裂缝
+        r = palette.primary.r + 30;
+        g = palette.primary.g + 18;
+        b = palette.primary.b + 12;
         
-        // 暗色基底 - 更亮一些
-        r = palette.primary.r + 35;
-        g = palette.primary.g + 20;
-        b = palette.primary.b + 15;
+        // 多层熔岩裂缝
+        const lava1 = Math.sin(u * Math.PI * 10 + v * 2) * Math.sin(v * Math.PI * 8);
+        const lava2 = Math.sin(u * Math.PI * 6 - v * 4) * Math.sin(v * Math.PI * 5 + u * 3);
+        const lavaStripe = Math.max(lava1, lava2);
         
-        // 熔岩裂缝发光 - 柔和
-        const crackGlow = crackPattern > 0.6 ? Math.pow((crackPattern - 0.6) / 0.4, 1.5) : 0;
-        const riverGlow = lavaRiver > 0.75 ? (lavaRiver - 0.75) / 0.25 * 0.3 : 0;
-        const totalGlow = Math.max(crackGlow * 0.6, riverGlow);
-        
-        r += totalGlow * (palette.highlight.r - palette.primary.r);
-        g += totalGlow * (palette.highlight.g - palette.primary.g);
-        b += totalGlow * (palette.highlight.b - palette.primary.b);
-        
-        // 柔和表面纹理
-        const surfaceNoise = (seededRandom(px + py * resolution) - 0.5) * 8;
-        r += surfaceNoise;
-        g += surfaceNoise * 0.6;
-        b += surfaceNoise * 0.4;
+        if (lavaStripe > 0.6) {
+          const glowAmount = (lavaStripe - 0.6) / 0.4;
+          const glow = glowAmount * glowAmount; // 平方使边缘更锐利
+          r += glow * (palette.highlight.r - palette.primary.r) * 0.7;
+          g += glow * (palette.highlight.g - palette.primary.g) * 0.5;
+          b += glow * (palette.highlight.b - palette.primary.b) * 0.3;
+        }
         
       } else if (type === 'ocean') {
-        // 海洋行星 - 柔和蓝色海洋 + 云层
-        const oceanDepth = fbm(px, py, 4, 0.5);
-        const cloudCover = fbm(px * 0.6 + 100, py * 0.6 + 100, 3, 0.5);
-        const landMass = fbm(px * 1.1, py * 1.1, 4, 0.5);
-        
-        // 海洋基底
+        // 海洋行星 - 蓝色海洋 + 云层
         r = palette.primary.r;
         g = palette.primary.g;
         b = palette.primary.b;
         
-        // 柔和海洋深度变化
-        const depthVariation = oceanDepth * 20;
-        r += depthVariation * 0.3;
-        g += depthVariation * 0.5;
-        b += depthVariation * 0.8;
+        // 海洋深浅变化
+        const oceanDepth = Math.sin(v * Math.PI) * 0.2 + Math.sin(u * Math.PI * 4 + v * 2) * 0.08;
+        r += oceanDepth * 25;
+        g += oceanDepth * 35;
+        b += oceanDepth * 45;
         
-        // 柔和陆地（绿棕色）
-        if (landMass > 0.58) {
-          const landInfluence = (landMass - 0.58) / 0.42 * 0.5;
-          r = r * (1 - landInfluence) + 130 * landInfluence;
-          g = g * (1 - landInfluence) + 155 * landInfluence;
-          b = b * (1 - landInfluence) + 100 * landInfluence;
-        }
-        
-        // 柔和云层（白色覆盖）
-        if (cloudCover > 0.55) {
-          const cloudInfluence = (cloudCover - 0.55) / 0.45 * 0.35;
-          r = r * (1 - cloudInfluence) + 250 * cloudInfluence;
-          g = g * (1 - cloudInfluence) + 252 * cloudInfluence;
-          b = b * (1 - cloudInfluence) + 255 * cloudInfluence;
+        // 云层（白色高光）
+        const cloud = Math.sin(u * Math.PI * 6 + v * 3) * Math.sin(v * Math.PI * 4);
+        if (cloud > 0.5) {
+          const cloudIntensity = (cloud - 0.5) / 0.5 * 30;
+          r += cloudIntensity;
+          g += cloudIntensity;
+          b += cloudIntensity * 0.9;
         }
         
       } else if (type === 'desert') {
-        // 沙漠行星 - 柔和沙丘纹理
-        const dunePattern = fbm(px * 0.7, py * 1.2, 3, 0.5);
-        const sandRipple = Math.sin(px * 0.08 + fbm(px, py, 2) * 3) * 0.5 + 0.5;
+        // 沙漠行星 - 沙丘纹理
+        const dune1 = Math.sin(v * Math.PI * 5 + u * 1.5) * 0.2;
+        const dune2 = Math.sin(v * Math.PI * 12 + u * 3) * 0.08;
+        const desertBand = dune1 + dune2 + 0.5;
         
-        // 柔和沙丘颜色
-        const duneMix = dunePattern * 0.35 + 0.35;
-        r = palette.primary.r * (1 - duneMix) + palette.secondary.r * duneMix;
-        g = palette.primary.g * (1 - duneMix) + palette.secondary.g * duneMix;
-        b = palette.primary.b * (1 - duneMix) + palette.secondary.b * duneMix;
+        const clampedBand = Math.max(0.25, Math.min(0.75, desertBand));
+        r = palette.primary.r * (1 - clampedBand) + palette.secondary.r * clampedBand;
+        g = palette.primary.g * (1 - clampedBand) + palette.secondary.g * clampedBand;
+        b = palette.primary.b * (1 - clampedBand) + palette.secondary.b * clampedBand;
         
-        // 柔和沙纹
-        const rippleEffect = sandRipple * 10;
-        r += rippleEffect;
-        g += rippleEffect * 0.9;
-        b += rippleEffect * 0.7;
+        // 沙尘暴高光
+        const dustHighlight = simpleNoise(u * 30, v * 30, baseHue) * 12;
+        r += dustHighlight;
+        g += dustHighlight * 0.85;
+        b += dustHighlight * 0.6;
       } else {
         r = palette.primary.r;
         g = palette.primary.g;
         b = palette.primary.b;
       }
       
-      // ========== NASA风格光照应用 ==========
-      // 大面积柔和高光区域（占据约半个球体）
-      const highlightZone = Math.max(0, diffuse - 0.3) / 0.7; // 更大的高光区域
-      const highlightStrength = Math.pow(highlightZone, 1.5) * 0.35;
+      // 增强对比度 - 让颜色更鲜明
+      const contrastFactor = 1.15;
+      const midPoint = 128;
+      r = midPoint + (r - midPoint) * contrastFactor;
+      g = midPoint + (g - midPoint) * contrastFactor;
+      b = midPoint + (b - midPoint) * contrastFactor;
       
-      // 应用主光照 - 昼面亮部柔和
-      r = r * lighting + palette.highlight.r * highlightStrength;
-      g = g * lighting + palette.highlight.g * highlightStrength;
-      b = b * lighting + palette.highlight.b * highlightStrength;
-      
-      // ========== 边缘大气光晕（非常轻微）==========
-      if (dist > 0.88) {
-        const edgeFade = (dist - 0.88) / 0.12;
-        const atmosphereColor = type === 'lava' 
-          ? { r: 255, g: 120, b: 70 }
-          : type === 'ice_giant' || type === 'ocean'
-          ? { r: 170, g: 210, b: 255 }
-          : { r: 190, g: 185, b: 230 };
-        
-        const atmosphereStrength = edgeFade * 0.2;
-        r = r * (1 - atmosphereStrength) + atmosphereColor.r * atmosphereStrength;
-        g = g * (1 - atmosphereStrength) + atmosphereColor.g * atmosphereStrength;
-        b = b * (1 - atmosphereStrength) + atmosphereColor.b * atmosphereStrength;
-      }
-      
-      // 整体亮度提升40%的最终调整
-      r *= 1.1;
-      g *= 1.1;
-      b *= 1.1;
-      
-      // 最终颜色限制
-      data[i] = Math.max(0, Math.min(255, Math.round(r)));
-      data[i + 1] = Math.max(0, Math.min(255, Math.round(g)));
-      data[i + 2] = Math.max(0, Math.min(255, Math.round(b)));
+      // 最终颜色限制（确保不会出现黑色）
+      data[i] = Math.max(25, Math.min(255, Math.round(r)));
+      data[i + 1] = Math.max(25, Math.min(255, Math.round(g)));
+      data[i + 2] = Math.max(25, Math.min(255, Math.round(b)));
       data[i + 3] = 255; // 完全不透明
     }
   }
@@ -1009,10 +917,11 @@ const PlanetOrnaments = ({
               <sphereGeometry args={[1, 64, 64]} />
               <meshStandardMaterial 
                 map={obj.texture}
-                roughness={obj.preset.type === 'gas_giant' ? 0.9 : 0.7}
-                metalness={obj.preset.type === 'rocky' ? 0.15 : 0.05}
-                emissive={obj.preset.type === 'lava' ? new THREE.Color('#ff3000') : undefined}
-                emissiveIntensity={obj.emissiveIntensity}
+                roughness={obj.preset.type === 'gas_giant' ? 0.6 : obj.preset.type === 'ice_giant' ? 0.4 : 0.5}
+                metalness={0.1}
+                emissive={obj.preset.type === 'lava' ? new THREE.Color('#ff3000') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.15)}
+                emissiveIntensity={obj.preset.type === 'lava' ? 0.4 : 0.1}
+                envMapIntensity={0.3}
               />
             </mesh>
             
@@ -1938,103 +1847,148 @@ const createRealisticSciFiPlanetTexture = (
   const imageData = ctx.getImageData(0, 0, resolution, resolution);
   const data = imageData.data;
   
-  const centerX = resolution / 2;
-  const centerY = resolution / 2;
-  const radius = resolution / 2;
+  // 简单的伪随机噪声函数
+  const simpleNoise2 = (x: number, y: number, noiseSeed: number) => {
+    const n = Math.sin(x * 12.9898 + y * 78.233 + noiseSeed) * 43758.5453;
+    return n - Math.floor(n);
+  };
   
-  // 光照方向 - 左上方
-  const lightDir = { x: -0.55, y: -0.45, z: 0.70 };
-  const lightLen = Math.sqrt(lightDir.x ** 2 + lightDir.y ** 2 + lightDir.z ** 2);
-  lightDir.x /= lightLen; lightDir.y /= lightLen; lightDir.z /= lightLen;
-  
+  // 使用等距柱状投影 - 整个矩形纹理，无圆形裁剪
   for (let py = 0; py < resolution; py++) {
     for (let px = 0; px < resolution; px++) {
       const i = (py * resolution + px) * 4;
       
-      const dx = (px - centerX) / radius;
-      const dy = (py - centerY) / radius;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // UV坐标：u = 经度 (0-1), v = 纬度 (0-1)
+      const u = px / resolution;
+      const v = py / resolution;
       
-      if (dist > 1) {
-        data[i] = data[i + 1] = data[i + 2] = 0;
-        data[i + 3] = 0;
-        continue;
-      }
-      
-      const nz = Math.sqrt(Math.max(0, 1 - dist * dist));
-      const nx = dx, ny = dy;
-      
-      // NASA风格光照
-      let diffuse = -(nx * lightDir.x + ny * lightDir.y + nz * lightDir.z);
-      diffuse = Math.max(0, diffuse);
-      diffuse = diffuse * diffuse * (3 - 2 * diffuse);
-      diffuse = Math.pow(diffuse, 0.6);
-      
-      const hemisphereLight = 0.45 + nz * 0.15;
-      const fresnel = Math.pow(1 - nz, 2.5) * 0.12;
-      let lighting = diffuse * 0.55 + hemisphereLight + fresnel;
-      lighting = Math.max(0.35, Math.min(1.15, lighting));
-      
-      // 表面纹理 - 更柔和
+      // 表面纹理
       let r: number, g: number, b: number;
-      const noiseVal = fbm(px, py, 3) * 0.6 + 0.2; // 压缩范围，更柔和
-      const detailNoise = (seededRandom(px + py * resolution) - 0.5) * 8; // 减少噪声强度
       
       if (planetType === 'gas_giant') {
-        const bandNoise = Math.sin(py * 0.04) * 0.35 + Math.sin(py * 0.1 + px * 0.002) * 0.2;
-        const mix = (bandNoise + 0.6) / 1.2; // 压缩范围
-        r = palette.primary.r * (1 - mix) + palette.secondary.r * mix + detailNoise;
-        g = palette.primary.g * (1 - mix) + palette.secondary.g * mix + detailNoise * 0.9;
-        b = palette.primary.b * (1 - mix) + palette.secondary.b * mix + detailNoise * 0.7;
+        // 气态巨行星 - 多层条纹 + 涡旋
+        const band1 = Math.sin(v * resolution * 0.035) * 0.35;
+        const band2 = Math.sin(v * resolution * 0.08 + u * 0.8) * 0.2;
+        const band3 = Math.sin(v * resolution * 0.15) * 0.1;
+        const bandNoise = band1 + band2 + band3;
+        
+        const mix = (bandNoise + 0.65) / 1.3;
+        const clampedMix = Math.max(0.15, Math.min(0.85, mix));
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        
+        // 细节噪点
+        const detail = simpleNoise2(u * 40, v * 40, size) * 10;
+        r += detail; g += detail * 0.9; b += detail * 0.7;
+        
       } else if (planetType === 'earth_like') {
-        const landMass = fbm(px * 1.0, py * 1.0, 4);
+        // 类地球 - 海洋 + 云层
         r = palette.primary.r; g = palette.primary.g; b = palette.primary.b;
-        if (landMass > 0.55) {
-          const landInfluence = (landMass - 0.55) / 0.45 * 0.6;
-          r = r * (1 - landInfluence) + 120 * landInfluence;
-          g = g * (1 - landInfluence) + 155 * landInfluence;
-          b = b * (1 - landInfluence) + 100 * landInfluence;
+        
+        // 海洋深浅
+        const oceanDepth = Math.sin(v * Math.PI) * 0.2 + Math.sin(u * Math.PI * 5 + v * 3) * 0.1;
+        r += oceanDepth * 20;
+        g += oceanDepth * 30;
+        b += oceanDepth * 45;
+        
+        // 云层
+        const cloud = Math.sin(u * Math.PI * 8 + v * 4) * Math.sin(v * Math.PI * 5);
+        if (cloud > 0.4) {
+          const cloudIntensity = (cloud - 0.4) / 0.6 * 35;
+          r += cloudIntensity;
+          g += cloudIntensity;
+          b += cloudIntensity * 0.85;
         }
-        r += detailNoise; g += detailNoise; b += detailNoise;
+        
       } else if (planetType === 'volcanic') {
+        // 火山行星 - 暗红色 + 熔岩裂缝
         r = palette.primary.r + 25; g = palette.primary.g + 15; b = palette.primary.b + 10;
-        const crackGlow = noiseVal > 0.6 ? Math.pow((noiseVal - 0.6) / 0.4, 1.5) * 0.5 : 0;
-        r += crackGlow * (palette.highlight.r - palette.primary.r);
-        g += crackGlow * (palette.highlight.g - palette.primary.g);
-        b += crackGlow * (palette.highlight.b - palette.primary.b);
-        r += detailNoise; g += detailNoise * 0.5; b += detailNoise * 0.3;
+        
+        // 多层熔岩
+        const lava1 = Math.sin(u * Math.PI * 10 + v * 2) * Math.sin(v * Math.PI * 8);
+        const lava2 = Math.sin(u * Math.PI * 6 - v * 4) * Math.sin(v * Math.PI * 5 + u * 3);
+        const lavaStripe = Math.max(lava1, lava2);
+        
+        if (lavaStripe > 0.55) {
+          const glowAmount = (lavaStripe - 0.55) / 0.45;
+          const glow = glowAmount * glowAmount;
+          r += glow * (palette.highlight.r - palette.primary.r) * 0.7;
+          g += glow * (palette.highlight.g - palette.primary.g) * 0.5;
+          b += glow * (palette.highlight.b - palette.primary.b) * 0.3;
+        }
+        
+      } else if (planetType === 'ice') {
+        // 冰冻星球 - 蓝白色 + 冰层纹理
+        const iceMix = Math.sin(v * Math.PI) * 0.2 + 0.4;
+        const iceDetail = Math.sin(u * Math.PI * 10 + v * 6) * 0.1;
+        const clampedMix = Math.max(0.2, Math.min(0.8, iceMix + iceDetail));
+        
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        
+        // 冰层高光
+        const iceHighlight = simpleNoise2(u * 25, v * 25, size) * 15;
+        r += iceHighlight * 0.8;
+        g += iceHighlight * 0.9;
+        b += iceHighlight;
+        
+      } else if (planetType === 'desert') {
+        // 沙漠星球 - 沙丘纹理
+        const dune1 = Math.sin(v * Math.PI * 6 + u * 2) * 0.2;
+        const dune2 = Math.sin(v * Math.PI * 14 + u * 4) * 0.1;
+        const desertMix = dune1 + dune2 + 0.5;
+        
+        const clampedMix = Math.max(0.2, Math.min(0.8, desertMix));
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        
+        // 沙尘细节
+        const dustDetail = simpleNoise2(u * 35, v * 35, size) * 12;
+        r += dustDetail;
+        g += dustDetail * 0.85;
+        b += dustDetail * 0.6;
+        
+      } else if (planetType === 'rocky') {
+        // 岩石星球 - 陨石坑 + 地形
+        const terrain = Math.sin(v * Math.PI) * 0.2 + Math.sin(u * Math.PI * 8 + v * 5) * 0.1;
+        const clampedMix = Math.max(0.2, Math.min(0.8, terrain + 0.4));
+        
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        
+        // 陨石坑
+        const crater = simpleNoise2(u * 20, v * 20, size);
+        if (crater > 0.82) {
+          const craterRim = (crater - 0.82) / 0.18 * 18;
+          r += craterRim; g += craterRim; b += craterRim;
+        }
+        
       } else {
-        const mix = noiseVal * 0.4 + 0.3; // 更柔和的混合
-        r = palette.primary.r * (1 - mix) + palette.secondary.r * mix + detailNoise;
-        g = palette.primary.g * (1 - mix) + palette.secondary.g * mix + detailNoise;
-        b = palette.primary.b * (1 - mix) + palette.secondary.b * mix + detailNoise;
+        // 其他类型 - 纬度渐变
+        const gradientMix = Math.sin(v * Math.PI) * 0.2 + 0.4;
+        const clampedMix = Math.max(0.25, Math.min(0.75, gradientMix));
+        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
+        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
+        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        const brightVariation = Math.abs(Math.sin(v * Math.PI * 3)) * 6;
+        r += brightVariation; g += brightVariation; b += brightVariation;
       }
       
-      // 应用光照
-      const highlightZone = Math.max(0, diffuse - 0.3) / 0.7;
-      const highlightStrength = Math.pow(highlightZone, 1.5) * 0.35;
-      r = r * lighting + palette.highlight.r * highlightStrength;
-      g = g * lighting + palette.highlight.g * highlightStrength;
-      b = b * lighting + palette.highlight.b * highlightStrength;
+      // 增强对比度 - 让颜色更鲜明
+      const contrastFactor = 1.15;
+      const midPoint = 128;
+      r = midPoint + (r - midPoint) * contrastFactor;
+      g = midPoint + (g - midPoint) * contrastFactor;
+      b = midPoint + (b - midPoint) * contrastFactor;
       
-      // 边缘大气
-      if (dist > 0.88) {
-        const edgeFade = (dist - 0.88) / 0.12;
-        const atmoColor = planetType === 'volcanic' ? { r: 255, g: 120, b: 70 } :
-                          planetType === 'ice' || planetType === 'earth_like' ? { r: 170, g: 210, b: 255 } :
-                          { r: 190, g: 185, b: 230 };
-        const atmoStrength = edgeFade * 0.2;
-        r = r * (1 - atmoStrength) + atmoColor.r * atmoStrength;
-        g = g * (1 - atmoStrength) + atmoColor.g * atmoStrength;
-        b = b * (1 - atmoStrength) + atmoColor.b * atmoStrength;
-      }
-      
-      // 整体亮度提升
-      r *= 1.1; g *= 1.1; b *= 1.1;
-      
-      data[i] = clamp(Math.round(r));
-      data[i + 1] = clamp(Math.round(g));
-      data[i + 2] = clamp(Math.round(b));
+      // 确保颜色不会太暗
+      data[i] = clamp(Math.max(25, Math.round(r)));
+      data[i + 1] = clamp(Math.max(25, Math.round(g)));
+      data[i + 2] = clamp(Math.max(25, Math.round(b)));
       data[i + 3] = 255;
     }
   }
@@ -2166,10 +2120,11 @@ const OrbitingPlanet = ({
         <sphereGeometry args={[planetSize, 64, 64]} />
         <meshStandardMaterial
           map={texture}
-          roughness={planetType === 'gas_giant' ? 0.9 : 0.7}
-          metalness={planetType === 'rocky' ? 0.15 : 0.05}
-          emissive={planetType === 'volcanic' ? new THREE.Color('#ff3000') : undefined}
-          emissiveIntensity={planetType === 'volcanic' ? 0.2 : 0}
+          roughness={planetType === 'gas_giant' ? 0.6 : planetType === 'ice' ? 0.4 : 0.5}
+          metalness={0.1}
+          emissive={planetType === 'volcanic' ? new THREE.Color('#ff3000') : new THREE.Color(rimColor).multiplyScalar(0.15)}
+          emissiveIntensity={planetType === 'volcanic' ? 0.4 : 0.1}
+          envMapIntensity={0.3}
         />
       </mesh>
       
@@ -2185,9 +2140,9 @@ const OrbitingPlanet = ({
         />
       </mesh>
       
-      {/* 星环 - 真实微粒尘埃带 */}
+      {/* 星环 - 横向环绕（类似土星环） */}
       {hasRing && ringTexture && (
-        <group rotation={[1.2, 0.1, 0.2]}>
+        <group rotation={[Math.PI / 2.5, 0.15, 0]}>
           <mesh>
             <ringGeometry args={[planetSize * 1.25, planetSize * 2.1, 128]} />
             <meshBasicMaterial
