@@ -66,7 +66,7 @@ const CONFIG = {
     red: '#D32F2F',
     green: '#2E7D32',
     white: '#FFFFFF',
-    warmLight: '#FFD54F',
+    warmLight: '#FFD700',
     lights: ['#00FFFF', '#FF00FF', '#8A2BE2', '#FFFFFF'], // 次元能量色
     borders: ['#FFFAF0', '#F0E68C', '#E6E6FA', '#FFB6C1', '#98FB98', '#87CEFA', '#FFDAB9'],
     giftColors: ['#B0C4DE', '#C0C0C0', '#D9D9D9', '#ECEFF1', '#FFD700'],
@@ -74,7 +74,7 @@ const CONFIG = {
   },
   counts: {
     foliage: 18000,           // 增加粒子密度
-    ornamentsChaos: 450,      // 散开态星球数量 - 大幅增加形成星球群落
+    ornamentsChaos: 400,       // 散开态星球数量
     ornamentsFormed: 12,      // 聚合态星球数量（闪电肚子里的精致宇宙）
     elementsChaos: 0,         // 散开态装饰 - 关闭避免漂浮方块
     elementsFormed: 0,
@@ -122,6 +122,39 @@ const FoliageMaterial = shaderMaterial(
   }`
 );
 extend({ FoliageMaterial });
+
+// --- Shader Material (Fresnel Atmosphere - 边缘大气效果，消除弹珠感) ---
+const AtmosphereMaterial = shaderMaterial(
+  { 
+    uColor: new THREE.Color('#ffffff'),
+    uCoefficient: 0.1,
+    uPower: 8.0
+  },
+  // Vertex Shader
+  `varying vec3 vNormal;
+  varying vec3 vViewPosition;
+  
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    vViewPosition = -mvPosition.xyz;
+    gl_Position = projectionMatrix * mvPosition;
+  }`,
+  // Fragment Shader
+  `uniform vec3 uColor;
+  uniform float uCoefficient;
+  uniform float uPower;
+  
+  varying vec3 vNormal;
+  varying vec3 vViewPosition;
+  
+  void main() {
+    vec3 viewDir = normalize(vViewPosition);
+    float intensity = pow(uCoefficient + 1.0 - max(dot(vNormal, viewDir), 0.0), uPower);
+    gl_FragColor = vec4(uColor, intensity * 0.6);
+  }`
+);
+extend({ AtmosphereMaterial });
 
 // --- Helper: Lightning Shape (Lightspeed logo outline mapped into 3D space) ---
 // SVG points from lightspeed-logo -> recentered and scaled to tree height
@@ -270,6 +303,129 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 };
 
 // --- Component: Planet Ornaments (真实天文行星系统) ---
+
+// 纹理生成引擎 v4.2 (来自 planet.tsx)：增强稳定性和兼容性
+const generateProceduralTexture = (type: string, baseColor: string): THREE.CanvasTexture => {
+  const size = 512; // 降低分辨率以节省内存
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, size, size);
+
+  if (type === 'volcanic') {
+    ctx.fillStyle = '#110000';
+    ctx.fillRect(0, 0, size, size);
+    
+    const lavaColors = ['#550000', '#aa2200', '#ff5500', '#ffcc00'];
+    
+    for (let layer = 0; layer < lavaColors.length; layer++) {
+      const count = 80 - (layer * 15); // 减少循环次数
+      for (let i = 0; i < count; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const r = Math.random() * (100 / (layer + 1)) + 20;
+        
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, lavaColors[layer]);
+        grad.addColorStop(1, 'transparent');
+        
+        ctx.globalAlpha = 0.4 + Math.random() * 0.4;
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 接缝平滑处理
+        if (x + r > size) { ctx.beginPath(); ctx.arc(x - size, y, r, 0, Math.PI * 2); ctx.fill(); }
+        if (x - r < 0) { ctx.beginPath(); ctx.arc(x + size, y, r, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+    
+    ctx.globalAlpha = 0.3;
+    ctx.globalCompositeOperation = 'multiply';
+    for (let i = 0; i < 5000; i++) { // 减少噪点数量
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(Math.random() * size, Math.random() * size, 2, 2);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1.0;
+
+  } else if (type === 'gas') {
+    // 气态巨行星 - 改成斑点/涡旋风格（类似黄色星球）
+    for (let i = 0; i < 100; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 50 + 10;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // 接缝平滑处理
+      if (x + r > size) { ctx.beginPath(); ctx.arc(x - size, y, r, 0, Math.PI * 2); ctx.fill(); }
+      if (x - r < 0) { ctx.beginPath(); ctx.arc(x + size, y, r, 0, Math.PI * 2); ctx.fill(); }
+    }
+  } else {
+    // 岩石/冰/海洋行星
+    for (let i = 0; i < 100; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 50 + 10;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  return tex;
+};
+
+// 将行星类型映射到纹理类型
+const mapPlanetTypeToTextureType = (type: 'gas_giant' | 'ice_giant' | 'rocky' | 'lava' | 'ocean' | 'desert'): string => {
+  switch (type) {
+    case 'gas_giant':
+    case 'ice_giant':
+      return 'gas';
+    case 'lava':
+      return 'volcanic';
+    default:
+      return 'rocky';
+  }
+};
+
+// 根据行星类型获取基础颜色
+const getPlanetBaseColor = (type: 'gas_giant' | 'ice_giant' | 'rocky' | 'lava' | 'ocean' | 'desert', hue: number): string => {
+  switch (type) {
+    case 'gas_giant':
+      return `hsl(${hue}, 55%, 50%)`;
+    case 'ice_giant':
+      return `hsl(${hue}, 45%, 55%)`;
+    case 'rocky':
+      return `hsl(${hue}, 20%, 40%)`;
+    case 'lava':
+      return '#331100';
+    case 'ocean':
+      return `hsl(${hue}, 60%, 40%)`;
+    case 'desert':
+      return `hsl(${hue}, 50%, 50%)`;
+    default:
+      return `hsl(${hue}, 35%, 45%)`;
+  }
+};
+
 // NASA天文摄影风格行星纹理生成器 - 真实昼夜分界、大面积柔和光照、暗部保留纹理
 const createCinematicPlanetTexture = (
   baseHue: number, 
@@ -768,8 +924,16 @@ const PlanetOrnaments = ({
       const preset = CINEMATIC_PLANET_PRESETS[i % CINEMATIC_PLANET_PRESETS.length];
       const planetSize = sizeMultiplier;
       
-      // 生成纹理（使用独特seed确保每颗星球纹理不同）
-      const texture = createCinematicPlanetTexture(preset.hue, preset.type, planetSize, planetSeed);
+      // 视觉补偿：根据距离计算大小，抵消透视效果，使所有星球在散开态下看起来大小一致
+      const camPos = new THREE.Vector3(0, 0, 320); // 摄像机默认位置
+      const distToCamera = chaosPos.distanceTo(camPos);
+      const refDist = 320; // 参考距离
+      const compensatedSize = sizeMultiplier * (distToCamera / refDist);
+
+      // 使用 planet.tsx 风格的纹理生成
+      const textureType = mapPlanetTypeToTextureType(preset.type);
+      const baseColor = getPlanetBaseColor(preset.type, preset.hue);
+      const texture = generateProceduralTexture(textureType, baseColor);
       
       // 只有大型气态行星才有环（类土星）
       const hasRing = (preset.type === 'gas_giant') && 
@@ -806,6 +970,7 @@ const PlanetOrnaments = ({
         anchor,
         chaosPos,
         planetSize,
+        compensatedSize, // 新增：透视补偿后的大小
         preset,
         texture,
         hasRing,
@@ -901,8 +1066,8 @@ const PlanetOrnaments = ({
         const isFocused = focusedIndex === i;
         const isChaos = state === 'CHAOS';
         
-        // FORMED 状态下星球缩小到很小，CHAOS 状态下正常大小
-        const baseScale = isChaos ? obj.planetSize : obj.planetSize * 0.08;
+        // FORMED 状态下使用原始大小缩小，CHAOS 状态下使用透视补偿后的大小（确保视觉大小一致）
+        const baseScale = isChaos ? obj.compensatedSize : obj.planetSize * 0.08;
         const scale = isFocused ? baseScale * 1.15 : baseScale;
         
         // 星环只在散开态(CHAOS)显示
@@ -919,7 +1084,7 @@ const PlanetOrnaments = ({
           >
             {/* 主体球 - 完全不透明的固体球体 */}
             <mesh scale={[scale, scale, scale]} rotation={[obj.axisTilt, 0, 0]}>
-              <sphereGeometry args={[1, 128, 128]} />
+              <sphereGeometry args={[1, 64, 64]} />
               <meshStandardMaterial 
                 map={obj.texture}
                 roughness={obj.preset.type === 'gas_giant' ? 0.85 : obj.preset.type === 'ice_giant' ? 0.8 : 0.9}
@@ -930,10 +1095,10 @@ const PlanetOrnaments = ({
               />
             </mesh>
             
-            {/* 边缘大气光晕 - 轻微的边缘发光 */}
+            {/* 边缘大气光晕 */}
             {isChaos && (
-              <mesh scale={[scale * 1.015, scale * 1.015, scale * 1.015]}>
-                <sphereGeometry args={[1, 32, 32]} />
+              <mesh scale={[scale * 1.02, scale * 1.02, scale * 1.02]}>
+                <sphereGeometry args={[1, 24, 24]} />
                 <meshBasicMaterial 
                   color={obj.atmosphereColor} 
                   transparent 
@@ -944,14 +1109,15 @@ const PlanetOrnaments = ({
               </mesh>
             )}
 
-            {/* 行星环 */}
-            {showRing && obj.ringTexture && (
+            {/* 行星环 - 纯色，使用行星的大气颜色 */}
+            {showRing && (
               <group rotation={[obj.ringTilt, 0.1, 0]}>
                 <mesh scale={[scale, scale, scale]}>
                   <ringGeometry args={[1.3, 2.3, 128]} />
                   <meshBasicMaterial 
-                    map={obj.ringTexture}
+                    color={obj.atmosphereColor}
                     transparent 
+                    opacity={0.5}
                     side={THREE.DoubleSide} 
                     depthWrite={false}
                   />
@@ -1367,7 +1533,9 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       }
       
       const preset = CINEMATIC_PLANET_PRESETS[(i + 5) % CINEMATIC_PLANET_PRESETS.length]; // 偏移确保多样性
-      const texture = createCinematicPlanetTexture(preset.hue, preset.type, size, planetSeed);
+      
+      // 使用原来的纹理生成方式
+      const texture = createCinematicPlanetTexture(preset.type, preset.hue, planetSeed);
       
       const hasRing = preset.type === 'gas_giant' && size > 1.5 && Math.random() > 0.5;
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
@@ -1433,7 +1601,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         <group key={i} position={[planet.pos.x, planet.pos.y, planet.pos.z]}>
           {/* 星球主体 - 完全不透明固体，高粗糙度避免油亮 */}
           <mesh rotation={[planet.axisTilt, 0, 0]}>
-            <sphereGeometry args={[planet.size, 128, 128]} />
+            <sphereGeometry args={[planet.size, 64, 64]} />
             <meshStandardMaterial
               map={planet.texture}
               roughness={0.9}
@@ -1459,7 +1627,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           {planet.hasRing && planet.ringTexture && (
             <group rotation={[planet.ringTilt, 0, 0]}>
               <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[planet.size * 1.3, planet.size * 2.2, 128]} />
+                <ringGeometry args={[planet.size * 1.3, planet.size * 2.2, 64]} />
                 <meshBasicMaterial
                   map={planet.ringTexture}
                   transparent
@@ -2120,8 +2288,25 @@ const OrbitingPlanet = ({
   const phaseRef = useRef(Math.random() * Math.PI * 2);
   
   const texture = useMemo(() => {
-    return createRealisticSciFiPlanetTexture(planetType, planetSize);
-  }, [planetType, planetSize]);
+    // 使用新的纹理生成方式，与 PlanetOrnaments 一致
+    const typeMap: Record<string, string> = {
+      'earth_like': 'rocky',
+      'gas_giant': 'gas',
+      'rocky': 'rocky',
+      'ice': 'rocky',
+      'desert': 'rocky',
+      'volcanic': 'volcanic'
+    };
+    const colorMap: Record<string, string> = {
+      'earth_like': '#4080c0',
+      'gas_giant': '#d4a060',
+      'rocky': '#808080',
+      'ice': '#80a0c0',
+      'desert': '#c0a060',
+      'volcanic': '#ff3000'
+    };
+    return generateProceduralTexture(typeMap[planetType], colorMap[planetType]);
+  }, [planetType]);
   
   const ringTexture = useMemo(() => {
     return hasRing ? createSciFiRingTexture(0.6) : null;
@@ -2278,72 +2463,8 @@ const DynamicOrbitingPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
 // --- Component: Cosmic Nebula (宇宙星云背景 - 散开态) ---
 const CosmicNebula = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
-  const groupRef = useRef<THREE.Points>(null);
-  const count = CONFIG.counts.nebulaParticles;
-  
-  const { positions, colors, sizes } = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    const siz = new Float32Array(count);
-    
-    // 星云色系 - 蓝紫色为主
-    const nebulaHues = [220, 260, 280, 300, 200, 180]; // 蓝、紫、粉、青
-    
-    for (let i = 0; i < count; i++) {
-      // 分布在整个视野范围，形成环绕感
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const radius = 200 + Math.random() * 400;
-      
-      pos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      pos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta) * 0.6; // 压扁成盘状
-      pos[i * 3 + 2] = radius * Math.cos(phi);
-      
-      // 星云颜色
-      const hue = nebulaHues[Math.floor(Math.random() * nebulaHues.length)];
-      const saturation = 40 + Math.random() * 40;
-      const lightness = 50 + Math.random() * 30;
-      const color = new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
-      col[i * 3] = color.r;
-      col[i * 3 + 1] = color.g;
-      col[i * 3 + 2] = color.b;
-      
-      // 大小变化
-      siz[i] = 0.5 + Math.random() * 2.5;
-    }
-    
-    return { positions: pos, colors: col, sizes: siz };
-  }, [count]);
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-    const targetAlpha = state === 'CHAOS' ? 0.4 : 0;
-    const mat = groupRef.current.material as THREE.PointsMaterial;
-    mat.opacity = MathUtils.damp(mat.opacity, targetAlpha, 3, delta);
-    
-    // 缓慢旋转
-    if (state === 'CHAOS') {
-      groupRef.current.rotation.y += delta * 0.01;
-    }
-  });
-
-  return (
-    <points ref={groupRef}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-      </bufferGeometry>
-      <pointsMaterial
-        size={1.5}
-        transparent
-        depthWrite={false}
-        vertexColors
-        opacity={0}
-        blending={THREE.AdditiveBlending}
-        sizeAttenuation
-      />
-    </points>
-  );
+  // removed per request to delete floating cubes
+  return null;
 };
 
 // --- Component: Bolt Fill (闪电内部的宇宙星云) ---
@@ -2372,13 +2493,13 @@ const BoltFill = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       pos[i * 3 + 1] = p.y;
       pos[i * 3 + 2] = p.z;
       
-      // 宇宙星云渐变色 - 更丰富的颜色
+      // 宇宙星云渐变色 - 更丰富的颜色（去除粉色）
       const tVal = Math.random();
       const nebulaColors = [
         new THREE.Color('#FFFFFF'),  // 白色星星
         new THREE.Color('#87CEEB'),  // 天蓝
         new THREE.Color('#DDA0DD'),  // 淡紫
-        new THREE.Color('#FF69B4'),  // 粉红
+        new THREE.Color('#B0C4DE'),  // 淡钢蓝
         new THREE.Color('#00CED1'),  // 青色
         new THREE.Color('#9370DB'),  // 中紫
         new THREE.Color('#4169E1'),  // 皇家蓝
@@ -2480,7 +2601,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         <mesh scale={[3.5, 3.5, 3.5]}>
           <sphereGeometry args={[1, 16, 16]} />
           <meshBasicMaterial
-            color="#FF00FF"
+            color="#8A2BE2"
             transparent
             opacity={0.2}
             side={THREE.BackSide}
@@ -2499,7 +2620,7 @@ const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         <mesh rotation={[Math.PI / 3, Math.PI / 4, 0]}>
           <ringGeometry args={[2.0, 2.3, 64]} />
           <meshBasicMaterial
-            color="#FF00FF"
+            color="#9370DB"
             transparent
             opacity={0.4}
             side={THREE.DoubleSide}
@@ -2620,10 +2741,10 @@ const Experience = ({
       {sceneState === 'CHAOS' && (
         <pointLight position={[0, 0, 0]} intensity={800} color="#ffffff" distance={4000} decay={1.5} />
       )}
-      {/* 原有点光源 - 只在FORMED状态显示，避免CHAOS时粉色闪烁 */}
+      {/* 原有点光源 - 只在FORMED状态显示 */}
       {sceneState === 'FORMED' && (
         <>
-          <pointLight position={[80, 80, 80]} intensity={200} color="#FF00FF" />
+          <pointLight position={[80, 80, 80]} intensity={200} color="#FFFFFF" />
           <pointLight position={[-80, 30, -80]} intensity={150} color="#00FFFF" />
           <pointLight position={[0, -60, 30]} intensity={100} color="#8A2BE2" />
           <pointLight position={[0, 60, 60]} intensity={180} color="#FFFFFF" />
@@ -2644,17 +2765,16 @@ const Experience = ({
              focusPoint={focusPoint}
              pinchActive={pinchActive}
            />
-           <ChristmasElements state={sceneState} />
            <FairyLights state={sceneState} />
         </Suspense>
         <InnerPlanets state={sceneState} />
-        <CosmicNebula state={sceneState} />
-        {/* Sparkles 只在FORMED状态显示，避免CHAOS时粉色闪烁 */}
+        {/* CosmicNebula removed to eliminate floating cubes */}
+        {/* Sparkles 只在FORMED状态显示 */}
         {sceneState === 'FORMED' && (
           <>
             <Sparkles count={1500} scale={150} size={18} speed={0} opacity={0.5} color="#8A2BE2" />
             <Sparkles count={1000} scale={130} size={12} speed={0} opacity={0.4} color="#00FFFF" />
-            <Sparkles count={800} scale={100} size={8} speed={0} opacity={0.35} color="#FF69B4" />
+            <Sparkles count={800} scale={100} size={8} speed={0} opacity={0.35} color="#87CEEB" />
           </>
         )}
       </group>
@@ -2779,11 +2899,96 @@ const GestureController = ({ onGesture, onMove, onMoveVertical, onStatus, debugM
   );
 };
 
+// --- Mouse Controller ---
+const MouseController = ({ 
+  onMove, 
+  onMoveVertical, 
+  sceneState 
+}: { 
+  onMove: (speed: number) => void; 
+  onMoveVertical: (speed: number) => void;
+  sceneState: 'CHAOS' | 'FORMED';
+}) => {
+  const isDragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (sceneState !== 'CHAOS') return;
+      isDragging.current = true;
+      lastPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current || sceneState !== 'CHAOS') return;
+      
+      const deltaX = e.clientX - lastPos.current.x;
+      const deltaY = e.clientY - lastPos.current.y;
+      
+      // 将鼠标移动转换为旋转速度
+      const sensitivity = 0.008;
+      onMove(deltaX * sensitivity);
+      onMoveVertical(-deltaY * sensitivity);
+      
+      lastPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseUp = () => {
+      isDragging.current = false;
+      // 停止时重置速度为0，让惯性系统接管
+      onMove(0);
+      onMoveVertical(0);
+    };
+
+    const handleMouseLeave = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        onMove(0);
+        onMoveVertical(0);
+      }
+    };
+
+    container.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('mouseleave', handleMouseLeave);
+
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, [sceneState, onMove, onMoveVertical]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 2,
+        cursor: sceneState === 'CHAOS' ? 'grab' : 'default',
+        pointerEvents: sceneState === 'CHAOS' ? 'auto' : 'none',
+      }}
+    />
+  );
+};
+
 // --- App Entry ---
 export default function GrandTreeApp() {
   const [sceneState, setSceneState] = useState<'CHAOS' | 'FORMED'>('FORMED'); // 初始即为合并后的闪电形态
   const [rotationSpeed, setRotationSpeed] = useState(0);
   const [rotationSpeedVertical, setRotationSpeedVertical] = useState(0);
+  const [mouseRotationSpeed, setMouseRotationSpeed] = useState(0);
+  const [mouseRotationSpeedVertical, setMouseRotationSpeedVertical] = useState(0);
   const [aiStatus, setAiStatus] = useState("INITIALIZING...");
   const [debugMode, setDebugMode] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<{ path: string, message: string, borderColor: string } | null>(null);
@@ -2820,8 +3025,8 @@ export default function GrandTreeApp() {
         <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
             <Experience
               sceneState={sceneState}
-              rotationSpeed={rotationSpeed}
-              rotationSpeedVertical={rotationSpeedVertical}
+              rotationSpeed={rotationSpeed + mouseRotationSpeed}
+              rotationSpeedVertical={rotationSpeedVertical + mouseRotationSpeedVertical}
               focusPoint={focusPoint}
               pinchActive={pinchActive}
             onPhotoSelect={(path: string, borderColor?: string, isClick?: boolean) => {
@@ -2832,6 +3037,14 @@ export default function GrandTreeApp() {
             />
         </Canvas>
       </div>
+      
+      {/* 鼠标控制器 - 在CHAOS状态下启用 */}
+      <MouseController
+        onMove={setMouseRotationSpeed}
+        onMoveVertical={setMouseRotationSpeedVertical}
+        sceneState={sceneState}
+      />
+      
       <GestureController
         onGesture={setSceneState}
         onMove={setRotationSpeed}
