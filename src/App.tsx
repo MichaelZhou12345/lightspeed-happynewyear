@@ -919,20 +919,20 @@ const PlanetOrnaments = ({
           >
             {/* 主体球 - 完全不透明的固体球体 */}
             <mesh scale={[scale, scale, scale]} rotation={[obj.axisTilt, 0, 0]}>
-              <sphereGeometry args={[1, 64, 64]} />
+              <sphereGeometry args={[1, 128, 128]} />
               <meshStandardMaterial 
                 map={obj.texture}
-                roughness={obj.preset.type === 'gas_giant' ? 0.6 : obj.preset.type === 'ice_giant' ? 0.4 : 0.5}
-                metalness={0.1}
-                emissive={obj.preset.type === 'lava' ? new THREE.Color('#ff3000') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.15)}
-                emissiveIntensity={obj.preset.type === 'lava' ? 0.4 : 0.1}
-                envMapIntensity={0.3}
+                roughness={obj.preset.type === 'gas_giant' ? 0.85 : obj.preset.type === 'ice_giant' ? 0.8 : 0.9}
+                metalness={0.0}
+                emissive={obj.preset.type === 'lava' ? new THREE.Color('#ff3000') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
+                emissiveIntensity={obj.preset.type === 'lava' ? 0.25 : 0.05}
+                envMapIntensity={0.15}
               />
             </mesh>
             
-            {/* 边缘大气光晕 - 非常轻微，淡蓝/淡紫色 */}
+            {/* 边缘大气光晕 - 轻微的边缘发光 */}
             {isChaos && (
-              <mesh scale={[scale * 1.02, scale * 1.02, scale * 1.02]}>
+              <mesh scale={[scale * 1.015, scale * 1.015, scale * 1.015]}>
                 <sphereGeometry args={[1, 32, 32]} />
                 <meshBasicMaterial 
                   color={obj.atmosphereColor} 
@@ -944,10 +944,9 @@ const PlanetOrnaments = ({
               </mesh>
             )}
 
-            {/* 行星环 - 真实的微粒尘埃带 */}
+            {/* 行星环 */}
             {showRing && obj.ringTexture && (
               <group rotation={[obj.ringTilt, 0.1, 0]}>
-                {/* 主环 */}
                 <mesh scale={[scale, scale, scale]}>
                   <ringGeometry args={[1.3, 2.3, 128]} />
                   <meshBasicMaterial 
@@ -1432,19 +1431,19 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     <group ref={groupRef}>
       {planetsData.map((planet, i) => (
         <group key={i} position={[planet.pos.x, planet.pos.y, planet.pos.z]}>
-          {/* 星球主体 - 完全不透明固体 */}
+          {/* 星球主体 - 完全不透明固体，高粗糙度避免油亮 */}
           <mesh rotation={[planet.axisTilt, 0, 0]}>
-            <sphereGeometry args={[planet.size, 64, 64]} />
+            <sphereGeometry args={[planet.size, 128, 128]} />
             <meshStandardMaterial
               map={planet.texture}
-              roughness={planet.preset.type === 'gas_giant' ? 0.9 : 0.7}
-              metalness={planet.preset.type === 'rocky' ? 0.15 : 0.05}
+              roughness={0.9}
+              metalness={0.0}
               emissive={planet.preset.type === 'lava' ? new THREE.Color('#ff3000') : undefined}
-              emissiveIntensity={planet.preset.type === 'lava' ? 0.25 : 0.01}
+              emissiveIntensity={planet.preset.type === 'lava' ? 0.2 : 0.02}
             />
           </mesh>
           
-          {/* 边缘大气光晕 - 非常轻微 */}
+          {/* 边缘大气光晕 */}
           <mesh rotation={[planet.axisTilt, 0, 0]}>
             <sphereGeometry args={[planet.size * 1.02, 24, 24]} />
             <meshBasicMaterial
@@ -1456,7 +1455,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
             />
           </mesh>
           
-          {/* 星环 - 真实微粒尘埃带 */}
+          {/* 星环 */}
           {planet.hasRing && planet.ringTexture && (
             <group rotation={[planet.ringTilt, 0, 0]}>
               <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -2609,12 +2608,18 @@ const Experience = ({
       {/* 动态环绕星球 - 只在散开态显示 */}
       <DynamicOrbitingPlanets state={sceneState} />
 
-      {/* NASA风格行星光照系统 - 环境光大幅提升确保行星细节可见 */}
-      <ambientLight intensity={0.8} color="#404050" />
+      {/* 深空感光照系统 - 低环境光 + 强点光源 */}
+      <ambientLight intensity={sceneState === 'CHAOS' ? 0.15 : 0.8} color="#404050" />
+      {/* 半球光 - 模拟太空中的微弱散射 */}
+      <hemisphereLight intensity={sceneState === 'CHAOS' ? 0.2 : 0.4} color="#8080ff" groundColor="#000000" />
       {/* 主太阳光 - 左上方，模拟真实太阳照射 */}
-      <directionalLight position={[-150, 100, 100]} intensity={2.5} color="#FFF8E8" />
+      <directionalLight position={[-150, 100, 100]} intensity={sceneState === 'CHAOS' ? 1.8 : 2.5} color="#fff4e0" />
       {/* 补光 - 右侧柔和光源 */}
-      <directionalLight position={[100, 50, 80]} intensity={0.8} color="#E8F0FF" />
+      <directionalLight position={[100, 50, 80]} intensity={0.6} color="#E8F0FF" />
+      {/* 中心恒星光 - 只在CHAOS状态显示，增强深空感 */}
+      {sceneState === 'CHAOS' && (
+        <pointLight position={[0, 0, 0]} intensity={800} color="#ffffff" distance={4000} decay={1.5} />
+      )}
       {/* 原有点光源 - 只在FORMED状态显示，避免CHAOS时粉色闪烁 */}
       {sceneState === 'FORMED' && (
         <>
