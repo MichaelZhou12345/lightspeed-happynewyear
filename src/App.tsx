@@ -76,9 +76,9 @@ const CONFIG = {
     foliage: 18000,           // 增加粒子密度
     ornamentsChaos: 450,      // 散开态星球数量 - 大幅增加形成星球群落
     ornamentsFormed: 12,      // 聚合态星球数量（闪电肚子里的精致宇宙）
-    elementsChaos: 150,       // 散开态装饰
+    elementsChaos: 0,         // 散开态装饰 - 关闭避免漂浮方块
     elementsFormed: 0,
-    lightsChaos: 300,
+    lightsChaos: 0,           // 关闭散开态彩灯避免粉色闪烁
     lightsFormed: 0,
     glowDots: 800,            // 增加发光点
     fillDots: 8000,           // 大量星尘填充宇宙
@@ -277,7 +277,7 @@ const createCinematicPlanetTexture = (
   size: number,
   seed: number = Math.random() * 10000
 ) => {
-  const resolution = Math.min(512, Math.max(256, Math.floor(size * 80)));
+  const resolution = Math.min(1024, Math.max(512, Math.floor(size * 120)));
   const canvas = document.createElement('canvas');
   canvas.width = resolution;
   canvas.height = resolution;
@@ -584,6 +584,11 @@ const createCinematicPlanetTexture = (
   ctx.putImageData(imageData, 0, 0);
   
   const texture = new THREE.CanvasTexture(canvas);
+  // 优化纹理质量 - 各向异性过滤和更好的采样
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 16; // 各向异性过滤，提升斜角观看质量
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 };
@@ -1795,7 +1800,7 @@ const createRealisticSciFiPlanetTexture = (
   planetType: 'earth_like' | 'gas_giant' | 'rocky' | 'ice' | 'desert' | 'volcanic',
   size: number
 ) => {
-  const resolution = Math.min(512, Math.max(256, Math.floor(size * 40)));
+  const resolution = Math.min(1024, Math.max(512, Math.floor(size * 60)));
   const canvas = document.createElement('canvas');
   canvas.width = resolution;
   canvas.height = resolution;
@@ -2043,6 +2048,11 @@ const createRealisticSciFiPlanetTexture = (
   ctx.putImageData(imageData, 0, 0);
   
   const texture = new THREE.CanvasTexture(canvas);
+  // 优化纹理质量 - 各向异性过滤和更好的采样
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.anisotropy = 16; // 各向异性过滤，提升斜角观看质量
+  texture.generateMipmaps = true;
   texture.needsUpdate = true;
   return texture;
 };
@@ -2590,8 +2600,8 @@ const Experience = ({
       <Stars radius={600} depth={300} count={8000} factor={6} saturation={0.5} fade speed={0.3} />
       <Environment preset="night" background={false} />
       
-      {/* 星云背景层 */}
-      <NebulaBackground />
+      {/* 星云背景层 - 只在FORMED状态显示，避免CHAOS时方形漂浮 */}
+      {sceneState === 'FORMED' && <NebulaBackground />}
       
       {/* 流星效果 - 只在散开态显示 */}
       <ShootingStars state={sceneState} />
@@ -2605,11 +2615,15 @@ const Experience = ({
       <directionalLight position={[-150, 100, 100]} intensity={2.5} color="#FFF8E8" />
       {/* 补光 - 右侧柔和光源 */}
       <directionalLight position={[100, 50, 80]} intensity={0.8} color="#E8F0FF" />
-      {/* 原有点光源保留但降低强度避免过曝 */}
-      <pointLight position={[80, 80, 80]} intensity={200} color="#FF00FF" />
-      <pointLight position={[-80, 30, -80]} intensity={150} color="#00FFFF" />
-      <pointLight position={[0, -60, 30]} intensity={100} color="#8A2BE2" />
-      <pointLight position={[0, 60, 60]} intensity={180} color="#FFFFFF" />
+      {/* 原有点光源 - 只在FORMED状态显示，避免CHAOS时粉色闪烁 */}
+      {sceneState === 'FORMED' && (
+        <>
+          <pointLight position={[80, 80, 80]} intensity={200} color="#FF00FF" />
+          <pointLight position={[-80, 30, -80]} intensity={150} color="#00FFFF" />
+          <pointLight position={[0, -60, 30]} intensity={100} color="#8A2BE2" />
+          <pointLight position={[0, 60, 60]} intensity={180} color="#FFFFFF" />
+        </>
+      )}
 
       {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
       <BoltGlow state={sceneState} />
@@ -2630,13 +2644,18 @@ const Experience = ({
         </Suspense>
         <InnerPlanets state={sceneState} />
         <CosmicNebula state={sceneState} />
-        <Sparkles count={1500} scale={150} size={18} speed={0.25} opacity={0.5} color="#8A2BE2" />
-        <Sparkles count={1000} scale={130} size={12} speed={0.4} opacity={0.4} color="#00FFFF" />
-        <Sparkles count={800} scale={100} size={8} speed={0.3} opacity={0.35} color="#FF69B4" />
+        {/* Sparkles 只在FORMED状态显示，避免CHAOS时粉色闪烁 */}
+        {sceneState === 'FORMED' && (
+          <>
+            <Sparkles count={1500} scale={150} size={18} speed={0} opacity={0.5} color="#8A2BE2" />
+            <Sparkles count={1000} scale={130} size={12} speed={0} opacity={0.4} color="#00FFFF" />
+            <Sparkles count={800} scale={100} size={8} speed={0} opacity={0.35} color="#FF69B4" />
+          </>
+        )}
       </group>
 
       <EffectComposer>
-        <Bloom luminanceThreshold={0.5} luminanceSmoothing={0.15} intensity={2.5} radius={0.7} mipmapBlur />
+        <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.2} intensity={1.8} radius={0.5} mipmapBlur />
         <Vignette eskil={false} offset={0.25} darkness={0.6} />
       </EffectComposer>
     </>
