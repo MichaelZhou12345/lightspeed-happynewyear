@@ -74,7 +74,7 @@ const CONFIG = {
   },
   counts: {
     foliage: 18000,           // 增加粒子密度
-    ornamentsChaos: 400,       // 散开态星球数量
+    ornamentsChaos: 150,       // 散开态星球数量
     ornamentsFormed: 12,      // 聚合态星球数量（闪电肚子里的精致宇宙）
     elementsChaos: 0,         // 散开态装饰 - 关闭避免漂浮方块
     elementsFormed: 0,
@@ -287,8 +287,8 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     }
   });
   
-  // Hide green particle cloud in formed state
-  if (state === 'FORMED') return null;
+  // 在散开态(CHAOS)隐藏粒子云
+  if (state === 'CHAOS') return null;
   return (
     <points>
       <bufferGeometry>
@@ -498,13 +498,13 @@ const createCinematicPlanetTexture = (
     
     switch (planetType) {
       case 'gas_giant':
-        // 类木星 - 棕橙黄条纹，更明亮
+        // 类土星 - 深橙棕色，统一风格
         return {
-          primary: { r: clampColor(190 + seededRandom(1) * 40), g: clampColor(155 + seededRandom(2) * 35), b: clampColor(95 + seededRandom(3) * 30) },
-          secondary: { r: clampColor(215 + seededRandom(4) * 30), g: clampColor(175 + seededRandom(5) * 30), b: clampColor(115 + seededRandom(6) * 25) },
-          tertiary: { r: clampColor(160 + seededRandom(7) * 35), g: clampColor(120 + seededRandom(8) * 25), b: clampColor(80 + seededRandom(9) * 20) },
-          highlight: { r: 255, g: 245, b: 220 },
-          shadow: { r: 120, g: 85, b: 55 } // 暗部更亮，保留细节
+          primary: { r: clampColor(180 + seededRandom(1) * 20), g: clampColor(130 + seededRandom(2) * 15), b: clampColor(80 + seededRandom(3) * 10) },
+          secondary: { r: clampColor(195 + seededRandom(4) * 15), g: clampColor(145 + seededRandom(5) * 15), b: clampColor(90 + seededRandom(6) * 10) },
+          tertiary: { r: clampColor(160 + seededRandom(7) * 15), g: clampColor(110 + seededRandom(8) * 10), b: clampColor(65 + seededRandom(9) * 10) },
+          highlight: { r: 220, g: 190, b: 150 },
+          shadow: { r: 100, g: 70, b: 45 }
         };
       case 'ice_giant':
         // 类海王星/天王星 - 蓝青色，更明亮
@@ -885,26 +885,30 @@ const PlanetOrnaments = ({
       );
 
       // 散开态位置 - 使用球面均匀分布，确保各个方向都有星球
-      // 近处大星球，远处小星球
+      // 近处大星球，远处小星球 - 远处更多
       let radius: number;
       let sizeMultiplier: number;
       
-      if (depthLayer < 0.15) {
-        // 前景层 - 近处大星球
-        radius = 150 + Math.random() * 100;
-        sizeMultiplier = 2.5 + Math.random() * 2.5;
+      if (depthLayer < 0.08) {
+        // 前景层 - 近处超大星球（少）
+        radius = 120 + Math.random() * 100;
+        sizeMultiplier = 6.0 + Math.random() * 4.0; // 6-10
+      } else if (depthLayer < 0.2) {
+        // 中近景层 - 大星球
+        radius = 220 + Math.random() * 130;
+        sizeMultiplier = 3.5 + Math.random() * 2.5; // 3.5-6
       } else if (depthLayer < 0.4) {
         // 中景层 - 中等星球
-        radius = 250 + Math.random() * 150;
-        sizeMultiplier = 1.2 + Math.random() * 1.8;
-      } else if (depthLayer < 0.7) {
-        // 远景层 - 较小星球
         radius = 350 + Math.random() * 150;
-        sizeMultiplier = 0.6 + Math.random() * 1.0;
+        sizeMultiplier = 1.8 + Math.random() * 1.7; // 1.8-3.5
+      } else if (depthLayer < 0.65) {
+        // 远景层 - 较小星球（更多）
+        radius = 500 + Math.random() * 200;
+        sizeMultiplier = 0.8 + Math.random() * 1.0; // 0.8-1.8
       } else {
-        // 最远层 - 小星球/卫星
-        radius = 450 + Math.random() * 200;
-        sizeMultiplier = 0.3 + Math.random() * 0.5;
+        // 最远层 - 小星球/卫星（最多）
+        radius = 700 + Math.random() * 250;
+        sizeMultiplier = 0.3 + Math.random() * 0.5; // 0.3-0.8
       }
       
       // 使用球面坐标系实现均匀分布
@@ -924,11 +928,11 @@ const PlanetOrnaments = ({
       const preset = CINEMATIC_PLANET_PRESETS[i % CINEMATIC_PLANET_PRESETS.length];
       const planetSize = sizeMultiplier;
       
-      // 视觉补偿：根据距离计算大小，抵消透视效果，使所有星球在散开态下看起来大小一致
+      // 不再做视觉补偿，保留真实的近大远小透视效果
       const camPos = new THREE.Vector3(0, 0, 320); // 摄像机默认位置
       const distToCamera = chaosPos.distanceTo(camPos);
       const refDist = 320; // 参考距离
-      const compensatedSize = sizeMultiplier * (distToCamera / refDist);
+      const compensatedSize = sizeMultiplier; // 直接使用原始大小，不补偿
 
       // 使用 planet.tsx 风格的纹理生成
       const textureType = mapPlanetTypeToTextureType(preset.type);
@@ -939,10 +943,11 @@ const PlanetOrnaments = ({
       const hasRing = (preset.type === 'gas_giant') && 
                       planetSize > 2.0 && Math.random() > 0.4;
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
-      const ringTilt = Math.PI / 5 + Math.random() * Math.PI / 4; // 环的倾斜角度
+      // 星环倾斜角度 - 确保始终有明显倾斜，避免荷包蛋效果
+      const ringTilt = Math.PI / 3 + Math.random() * Math.PI / 6; // 60° 到 90° 倾斜
       
-      // 行星轴倾斜
-      const axisTilt = (Math.random() - 0.5) * 0.3;
+      // 行星轴倾斜 - 配合星环倾斜
+      const axisTilt = (Math.random() - 0.5) * 0.5;
       
       // 大气层颜色（根据行星类型）
       const getAtmosphereColor = () => {
@@ -1109,15 +1114,15 @@ const PlanetOrnaments = ({
               </mesh>
             )}
 
-            {/* 行星环 - 纯色，使用行星的大气颜色 */}
+            {/* 行星环 - 土星环风格，横向环绕星球 */}
             {showRing && (
-              <group rotation={[obj.ringTilt, 0.1, 0]}>
+              <group rotation={[Math.PI / 2.5, 0.2, 0]}>
                 <mesh scale={[scale, scale, scale]}>
-                  <ringGeometry args={[1.3, 2.3, 128]} />
+                  <ringGeometry args={[1.35, 2.2, 128]} />
                   <meshBasicMaterial 
-                    color={obj.atmosphereColor}
+                    color="#d4b050"
                     transparent 
-                    opacity={0.5}
+                    opacity={0.7}
                     side={THREE.DoubleSide} 
                     depthWrite={false}
                   />
@@ -2657,39 +2662,35 @@ const Experience = ({
   const velocityX = useRef(0);
   const velocityY = useRef(0);
 
-  // Auto-spin when dispersed; gesture can add/subtract spin (360度旋转 + 惯性)
+  // Auto-spin when dispersed; gesture can add/subtract spin (只允许水平旋转)
   useFrame((_, delta) => {
     if (sceneGroupRef.current) {
       if (sceneState === 'CHAOS') {
         // 平滑插值手势输入 - 更丝滑的过渡
         const lerpFactor = 0.12; // 提高响应速度
         smoothSpeedX.current = MathUtils.lerp(smoothSpeedX.current, rotationSpeed, lerpFactor);
-        smoothSpeedY.current = MathUtils.lerp(smoothSpeedY.current, rotationSpeedVertical, lerpFactor);
+        // 禁用垂直旋转
+        // smoothSpeedY.current = MathUtils.lerp(smoothSpeedY.current, rotationSpeedVertical, lerpFactor);
         
-        // 计算目标速度 - 增大系数让旋转更明显
+        // 计算目标速度 - 只有水平方向
         const targetVelX = smoothSpeedX.current * 8;
-        const targetVelY = smoothSpeedY.current * 10;
         
         // 惯性系统 - 缓慢衰减
         const friction = 0.96; // 摩擦力，越接近1惯性越大
         const acceleration = 0.2; // 提高加速度
         
         // 如果有手势输入，加速到目标速度；否则惯性衰减
-        if (Math.abs(rotationSpeed) > 0.003 || Math.abs(rotationSpeedVertical) > 0.003) {
+        if (Math.abs(rotationSpeed) > 0.003) {
           velocityX.current = MathUtils.lerp(velocityX.current, targetVelX, acceleration);
-          velocityY.current = MathUtils.lerp(velocityY.current, targetVelY, acceleration);
         } else {
           velocityX.current *= friction;
-          velocityY.current *= friction;
         }
         
-        // 基础自转 + 手势控制
+        // 只允许水平自转
         const baseSpin = 0.05; // 降低基础自转，让手势控制更突出
         sceneGroupRef.current.rotation.y += (baseSpin + velocityX.current) * delta;
-        sceneGroupRef.current.rotation.x += velocityY.current * delta;
-        
-        // 限制X轴旋转范围
-        sceneGroupRef.current.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, sceneGroupRef.current.rotation.x));
+        // 禁用垂直旋转
+        // sceneGroupRef.current.rotation.x += velocityY.current * delta;
       }
     }
   });
