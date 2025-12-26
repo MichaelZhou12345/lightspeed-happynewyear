@@ -74,16 +74,17 @@ const CONFIG = {
   },
   counts: {
     foliage: 18000,           // 增加粒子密度
-    ornamentsChaos: 150,       // 散开态星球数量
+    ornamentsChaos: 150,       // 散开态星球数量 - 增加到150
     ornamentsFormed: 12,      // 聚合态星球数量（闪电肚子里的精致宇宙）
     elementsChaos: 0,         // 散开态装饰 - 关闭避免漂浮方块
     elementsFormed: 0,
     lightsChaos: 0,           // 关闭散开态彩灯避免粉色闪烁
     lightsFormed: 0,
-    glowDots: 800,            // 增加发光点
-    fillDots: 8000,           // 大量星尘填充宇宙
-    innerPlanets: 18,         // 闪电内部精致星球
-    nebulaParticles: 3000,    // 星云粒子
+    glowDots: 400,            // 减少发光点
+    fillDots: 4000,           // 减少星尘填充
+    innerPlanets: 35,         // 闪电内部精致星球
+    nebulaParticles: 1500,    // 减少星云粒子
+    disperseParticles: 8000,  // 散开时的宇宙粒子数量
   },
   tree: { height: 200, radius: 75 }, // 超大闪电尺寸
   photos: {
@@ -306,7 +307,7 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
 // 纹理生成引擎 v4.2 (来自 planet.tsx)：增强稳定性和兼容性
 const generateProceduralTexture = (type: string, baseColor: string): THREE.CanvasTexture => {
-  const size = 512; // 降低分辨率以节省内存
+  const size = 1024; // 提高分辨率，更精细
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -316,23 +317,42 @@ const generateProceduralTexture = (type: string, baseColor: string): THREE.Canva
   ctx.fillRect(0, 0, size, size);
 
   if (type === 'volcanic') {
-    ctx.fillStyle = '#110000';
+    // 深色基底，不要纯黑
+    ctx.fillStyle = '#1a0808';
     ctx.fillRect(0, 0, size, size);
     
-    const lavaColors = ['#550000', '#aa2200', '#ff5500', '#ffcc00'];
+    // 更深沉的暗红色调，融入紫色宇宙氛围
+    const lavaColors = ['#2a0a0a', '#3d1515', '#502020', '#5a2525'];
     
+    // 添加大面积的暗区域
+    for (let i = 0; i < 50; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 150 + 80;
+      
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(20, 10, 10, 0.6)');
+      grad.addColorStop(1, 'transparent');
+      
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // 细小的暗红熔岩纹理
     for (let layer = 0; layer < lavaColors.length; layer++) {
-      const count = 80 - (layer * 15); // 减少循环次数
+      const count = 60 - (layer * 10);
       for (let i = 0; i < count; i++) {
         const x = Math.random() * size;
         const y = Math.random() * size;
-        const r = Math.random() * (100 / (layer + 1)) + 20;
+        const r = Math.random() * (60 / (layer + 1)) + 15;
         
         const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
         grad.addColorStop(0, lavaColors[layer]);
         grad.addColorStop(1, 'transparent');
         
-        ctx.globalAlpha = 0.4 + Math.random() * 0.4;
+        ctx.globalAlpha = 0.3 + Math.random() * 0.3;
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -344,24 +364,50 @@ const generateProceduralTexture = (type: string, baseColor: string): THREE.Canva
       }
     }
     
-    ctx.globalAlpha = 0.3;
+    // 添加细腻的纹理噪点
+    ctx.globalAlpha = 0.25;
     ctx.globalCompositeOperation = 'multiply';
-    for (let i = 0; i < 5000; i++) { // 减少噪点数量
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(Math.random() * size, Math.random() * size, 2, 2);
+    for (let i = 0; i < 8000; i++) {
+      const brightness = Math.random();
+      ctx.fillStyle = `rgba(0, 0, 0, ${brightness * 0.5})`;
+      ctx.fillRect(Math.random() * size, Math.random() * size, 1, 1);
     }
+    
+    // 添加微弱的紫色调，融入环境
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.15;
+    ctx.fillStyle = '#3a2050';
+    ctx.fillRect(0, 0, size, size);
+    
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1.0;
 
   } else if (type === 'gas') {
-    // 气态巨行星 - 改成斑点/涡旋风格（类似黄色星球）
-    for (let i = 0; i < 100; i++) {
+    // 气态巨行星 - 柔和的带状纹理
+    const bandCount = 15 + Math.floor(Math.random() * 10);
+    for (let i = 0; i < bandCount; i++) {
+      const y = (i / bandCount) * size;
+      const height = size / bandCount;
+      const darkness = Math.sin((i / bandCount) * Math.PI * 4) * 0.15;
+      
+      ctx.globalAlpha = 0.3 + Math.random() * 0.2;
+      ctx.fillStyle = `rgba(0, 0, 0, ${Math.abs(darkness)})`;
+      ctx.fillRect(0, y, size, height);
+    }
+    
+    // 添加涡旋和斑点
+    ctx.globalAlpha = 1.0;
+    for (let i = 0; i < 80; i++) {
       const x = Math.random() * size;
       const y = Math.random() * size;
-      const r = Math.random() * 50 + 10;
+      const r = Math.random() * 40 + 10;
       const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+      
+      const brightness = Math.random() * 0.2;
+      grad.addColorStop(0, `rgba(255,255,255,${brightness})`);
+      grad.addColorStop(0.5, `rgba(200,200,200,${brightness * 0.5})`);
       grad.addColorStop(1, 'transparent');
+      
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -371,25 +417,63 @@ const generateProceduralTexture = (type: string, baseColor: string): THREE.Canva
       if (x + r > size) { ctx.beginPath(); ctx.arc(x - size, y, r, 0, Math.PI * 2); ctx.fill(); }
       if (x - r < 0) { ctx.beginPath(); ctx.arc(x + size, y, r, 0, Math.PI * 2); ctx.fill(); }
     }
+    
+    // 细腻纹理
+    for (let i = 0; i < 5000; i++) {
+      const brightness = Math.random() * 0.3;
+      ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`;
+      ctx.fillRect(Math.random() * size, Math.random() * size, 1, 1);
+    }
+    
   } else {
-    // 岩石/冰/海洋行星
-    for (let i = 0; i < 100; i++) {
+    // 岩石/冰/海洋行星 - 更细腻的表面
+    // 大陆块
+    for (let i = 0; i < 40; i++) {
       const x = Math.random() * size;
       const y = Math.random() * size;
-      const r = Math.random() * 50 + 10;
+      const r = Math.random() * 100 + 40;
       const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, 'rgba(255,255,255,0.15)');
+      
+      const darkness = 0.1 + Math.random() * 0.2;
+      grad.addColorStop(0, `rgba(0, 0, 0, ${darkness})`);
+      grad.addColorStop(0.7, `rgba(0, 0, 0, ${darkness * 0.5})`);
+      grad.addColorStop(1, 'transparent');
+      
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // 接缝平滑处理
+      if (x + r > size) { ctx.beginPath(); ctx.arc(x - size, y, r, 0, Math.PI * 2); ctx.fill(); }
+      if (x - r < 0) { ctx.beginPath(); ctx.arc(x + size, y, r, 0, Math.PI * 2); ctx.fill(); }
+    }
+    
+    // 细节纹理
+    for (let i = 0; i < 150; i++) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const r = Math.random() * 30 + 5;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, 'rgba(255,255,255,0.12)');
       grad.addColorStop(1, 'transparent');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+    
+    // 表面噪点
+    for (let i = 0; i < 6000; i++) {
+      const brightness = Math.random() * 0.2;
+      ctx.fillStyle = `rgba(255, 255, 255, ${brightness})`;
+      ctx.fillRect(Math.random() * size, Math.random() * size, 1, 1);
+    }
   }
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8; // 提高各向异性过滤
   return tex;
 };
 
@@ -498,22 +582,22 @@ const createCinematicPlanetTexture = (
     
     switch (planetType) {
       case 'gas_giant':
-        // 类土星 - 深橙棕色，统一风格
+        // 类土星 - 丰富的棕橙黄色层次，真实土星风格
         return {
-          primary: { r: clampColor(180 + seededRandom(1) * 20), g: clampColor(130 + seededRandom(2) * 15), b: clampColor(80 + seededRandom(3) * 10) },
-          secondary: { r: clampColor(195 + seededRandom(4) * 15), g: clampColor(145 + seededRandom(5) * 15), b: clampColor(90 + seededRandom(6) * 10) },
-          tertiary: { r: clampColor(160 + seededRandom(7) * 15), g: clampColor(110 + seededRandom(8) * 10), b: clampColor(65 + seededRandom(9) * 10) },
-          highlight: { r: 220, g: 190, b: 150 },
-          shadow: { r: 100, g: 70, b: 45 }
+          primary: { r: clampColor(195 + seededRandom(1) * 25), g: clampColor(155 + seededRandom(2) * 20), b: clampColor(95 + seededRandom(3) * 15) },
+          secondary: { r: clampColor(215 + seededRandom(4) * 20), g: clampColor(175 + seededRandom(5) * 18), b: clampColor(115 + seededRandom(6) * 12) },
+          tertiary: { r: clampColor(170 + seededRandom(7) * 20), g: clampColor(125 + seededRandom(8) * 15), b: clampColor(75 + seededRandom(9) * 12) },
+          highlight: { r: 245, g: 225, b: 180 },
+          shadow: { r: 120, g: 85, b: 50 }
         };
       case 'ice_giant':
-        // 类海王星/天王星 - 蓝青色，更明亮
+        // 类海王星/天王星 - 高对比度蓝青色，明显的条纹
         return {
-          primary: { r: clampColor(90 + seededRandom(1) * 35), g: clampColor(155 + seededRandom(2) * 45), b: clampColor(200 + seededRandom(3) * 40) },
-          secondary: { r: clampColor(110 + seededRandom(4) * 25), g: clampColor(175 + seededRandom(5) * 35), b: clampColor(220 + seededRandom(6) * 30) },
-          tertiary: { r: clampColor(70 + seededRandom(7) * 25), g: clampColor(125 + seededRandom(8) * 35), b: clampColor(175 + seededRandom(9) * 35) },
-          highlight: { r: 230, g: 245, b: 255 },
-          shadow: { r: 60, g: 100, b: 145 } // 暗部蓝色调，保留纹理
+          primary: { r: clampColor(60 + seededRandom(1) * 30), g: clampColor(140 + seededRandom(2) * 40), b: clampColor(210 + seededRandom(3) * 35) },
+          secondary: { r: clampColor(100 + seededRandom(4) * 35), g: clampColor(180 + seededRandom(5) * 40), b: clampColor(240 + seededRandom(6) * 15) },
+          tertiary: { r: clampColor(40 + seededRandom(7) * 25), g: clampColor(100 + seededRandom(8) * 35), b: clampColor(160 + seededRandom(9) * 40) },
+          highlight: { r: 200, g: 235, b: 255 },
+          shadow: { r: 30, g: 70, b: 120 }
         };
       case 'rocky':
         // 岩石行星 - 灰棕色，更明亮
@@ -525,22 +609,22 @@ const createCinematicPlanetTexture = (
           shadow: { r: 85, g: 80, b: 75 } // 暗部保留岩石纹理
         };
       case 'lava':
-        // 熔岩行星 - 暗红黑带发光裂缝
+        // 熔岩行星 - 深棕暗紫色调，更柔和
         return {
-          primary: { r: clampColor(85 + seededRandom(1) * 25), g: clampColor(50 + seededRandom(2) * 20), b: clampColor(40 + seededRandom(3) * 15) },
-          secondary: { r: clampColor(105 + seededRandom(4) * 25), g: clampColor(60 + seededRandom(5) * 20), b: clampColor(45 + seededRandom(6) * 15) },
-          tertiary: { r: clampColor(65 + seededRandom(7) * 20), g: clampColor(40 + seededRandom(8) * 15), b: clampColor(30 + seededRandom(9) * 12) },
-          highlight: { r: 255, g: 160, b: 80 }, // 熔岩发光更亮
-          shadow: { r: 55, g: 35, b: 28 }
+          primary: { r: clampColor(70 + seededRandom(1) * 20), g: clampColor(55 + seededRandom(2) * 15), b: clampColor(60 + seededRandom(3) * 18) },
+          secondary: { r: clampColor(85 + seededRandom(4) * 20), g: clampColor(65 + seededRandom(5) * 15), b: clampColor(70 + seededRandom(6) * 18) },
+          tertiary: { r: clampColor(55 + seededRandom(7) * 18), g: clampColor(45 + seededRandom(8) * 12), b: clampColor(50 + seededRandom(9) * 15) },
+          highlight: { r: 180, g: 120, b: 90 }, // 柔和的橙棕色发光
+          shadow: { r: 40, g: 32, b: 35 }
         };
       case 'ocean':
-        // 海洋行星 - 深蓝绿色，更明亮
+        // 海洋行星 - 高对比度深蓝色，明显的海陆差异
         return {
-          primary: { r: clampColor(60 + seededRandom(1) * 35), g: clampColor(105 + seededRandom(2) * 45), b: clampColor(160 + seededRandom(3) * 45) },
-          secondary: { r: clampColor(80 + seededRandom(4) * 30), g: clampColor(130 + seededRandom(5) * 40), b: clampColor(180 + seededRandom(6) * 40) },
-          tertiary: { r: clampColor(50 + seededRandom(7) * 25), g: clampColor(85 + seededRandom(8) * 35), b: clampColor(130 + seededRandom(9) * 35) },
-          highlight: { r: 210, g: 240, b: 255 },
-          shadow: { r: 45, g: 75, b: 115 }
+          primary: { r: clampColor(30 + seededRandom(1) * 25), g: clampColor(80 + seededRandom(2) * 40), b: clampColor(160 + seededRandom(3) * 50) },
+          secondary: { r: clampColor(50 + seededRandom(4) * 30), g: clampColor(120 + seededRandom(5) * 45), b: clampColor(200 + seededRandom(6) * 45) },
+          tertiary: { r: clampColor(20 + seededRandom(7) * 20), g: clampColor(60 + seededRandom(8) * 30), b: clampColor(120 + seededRandom(9) * 40) },
+          highlight: { r: 180, g: 230, b: 255 },
+          shadow: { r: 15, g: 45, b: 90 }
         };
       case 'desert':
         // 沙漠行星 - 黄棕色，更明亮
@@ -583,139 +667,673 @@ const createCinematicPlanetTexture = (
       let r: number, g: number, b: number;
       
       if (type === 'gas_giant') {
-        // 气态巨行星 - 类木星多层条纹 + 涡旋细节
+        // 气态巨行星 - 真实土星/木星风格，丰富的条纹和大气细节
         const bandFreq = 0.025 + seededRandom(10) * 0.01;
         
-        // 多层条纹叠加
-        const band1 = Math.sin(v * resolution * bandFreq) * 0.35;
-        const band2 = Math.sin(v * resolution * bandFreq * 2.3 + u * 0.5) * 0.2;
-        const band3 = Math.sin(v * resolution * bandFreq * 4.7) * 0.1;
-        const bandNoise = band1 + band2 + band3;
+        // 多层大气条纹 - 不同频率叠加产生复杂结构
+        const band1 = Math.sin(v * resolution * bandFreq) * 0.5;
+        const band2 = Math.sin(v * resolution * bandFreq * 2.1 + seededRandom(11) * 2) * 0.35;
+        const band3 = Math.sin(v * resolution * bandFreq * 4.3 + seededRandom(12) * 3) * 0.2;
+        const band4 = Math.sin(v * resolution * bandFreq * 8.7) * 0.12;
+        const band5 = Math.sin(v * resolution * bandFreq * 0.5) * 0.25; // 大尺度渐变
+        const band6 = Math.sin(v * resolution * bandFreq * 16 + seededRandom(14) * 4) * 0.06; // 细条纹
         
-        // 经度方向的微小扰动（模拟大气流动）
-        const flowDistort = Math.sin(u * Math.PI * 8 + v * 20) * 0.03;
+        // 经度方向的大气流动扰动 - 增强
+        const flowDistort1 = Math.sin(u * Math.PI * 6 + v * 15 + seededRandom(13) * 5) * 0.06;
+        const flowDistort2 = Math.sin(u * Math.PI * 12 - v * 8) * 0.04;
+        const flowDistort3 = Math.cos(u * Math.PI * 3 + v * 25) * 0.025;
+        const flowDistort4 = Math.sin(u * Math.PI * 18 + v * 40) * 0.015;
         
-        const bandMix = (bandNoise + flowDistort + 0.65) / 1.3;
-        const clampedMix = Math.max(0.15, Math.min(0.85, bandMix));
+        // 湍流效果 - 模拟大气涡旋
+        const turbulence1 = Math.sin(u * Math.PI * 20 + v * 30) * Math.cos(v * Math.PI * 15) * 0.04;
+        const turbulence2 = Math.sin(u * Math.PI * 35 - v * 20) * Math.sin(v * Math.PI * 25 + u * 10) * 0.03;
+        const turbulence3 = Math.cos(u * Math.PI * 50 + v * 45) * Math.sin(v * Math.PI * 35) * 0.02;
         
-        // 三色混合：primary, secondary, tertiary
+        const bandNoise = band1 + band2 + band3 + band4 + band5 + band6 + flowDistort1 + flowDistort2 + flowDistort3 + flowDistort4 + turbulence1 + turbulence2 + turbulence3;
+        
+        const bandMix = (bandNoise + 0.9) / 1.8;
+        const clampedMix = Math.max(0.05, Math.min(0.95, bandMix));
+        
+        // 五色混合：更丰富的色彩过渡
         const t = clampedMix;
-        if (t < 0.5) {
-          const localT = t * 2;
+        if (t < 0.25) {
+          const localT = t * 4;
+          r = palette.shadow.r * (1 - localT) + palette.primary.r * localT;
+          g = palette.shadow.g * (1 - localT) + palette.primary.g * localT;
+          b = palette.shadow.b * (1 - localT) + palette.primary.b * localT;
+        } else if (t < 0.5) {
+          const localT = (t - 0.25) * 4;
           r = palette.primary.r * (1 - localT) + palette.secondary.r * localT;
           g = palette.primary.g * (1 - localT) + palette.secondary.g * localT;
           b = palette.primary.b * (1 - localT) + palette.secondary.b * localT;
-        } else {
-          const localT = (t - 0.5) * 2;
+        } else if (t < 0.75) {
+          const localT = (t - 0.5) * 4;
           r = palette.secondary.r * (1 - localT) + palette.tertiary.r * localT;
           g = palette.secondary.g * (1 - localT) + palette.tertiary.g * localT;
           b = palette.secondary.b * (1 - localT) + palette.tertiary.b * localT;
+        } else {
+          const localT = (t - 0.75) * 4;
+          r = palette.tertiary.r * (1 - localT) + palette.highlight.r * localT * 0.8;
+          g = palette.tertiary.g * (1 - localT) + palette.highlight.g * localT * 0.8;
+          b = palette.tertiary.b * (1 - localT) + palette.highlight.b * localT * 0.8;
         }
         
-        // 细微噪点增加质感（只增亮，不变暗）
-        const detailNoise = simpleNoise(u * 50, v * 50, baseHue) * 8;
-        r += detailNoise;
-        g += detailNoise * 0.9;
-        b += detailNoise * 0.7;
+        // 风暴系统 - 类似木星大红斑，更大更明显
+        const stormX = 0.25 + seededRandom(20) * 0.5;
+        const stormY = 0.35 + seededRandom(21) * 0.3;
+        const stormDist = Math.sqrt(Math.pow((u - stormX) * 2.2, 2) + Math.pow((v - stormY) * 3.5, 2));
+        if (stormDist < 0.18) {
+          const stormIntensity = 1 - stormDist / 0.18;
+          const stormSwirl = Math.sin(stormDist * 50 + Math.atan2(v - stormY, u - stormX) * 4) * stormIntensity;
+          // 风暴核心更亮
+          r += stormSwirl * 35 + stormIntensity * 20;
+          g += stormSwirl * 20 + stormIntensity * 10;
+          b -= stormSwirl * 8;
+        }
+        
+        // 小型涡旋点缀 - 更多
+        for (let si = 0; si < 8; si++) {
+          const sx = seededRandom(30 + si) * 0.9 + 0.05;
+          const sy = seededRandom(35 + si) * 0.6 + 0.2;
+          const sd = Math.sqrt(Math.pow((u - sx) * 3, 2) + Math.pow((v - sy) * 5, 2));
+          if (sd < 0.07) {
+            const vortexIntensity = (1 - sd / 0.07) * 0.6;
+            r += vortexIntensity * 18;
+            g += vortexIntensity * 12;
+            b += vortexIntensity * 4;
+          }
+        }
+        
+        // 细微噪点增加质感 - 多层
+        const detailNoise = simpleNoise(u * 60, v * 60, baseHue) * 8;
+        const fineNoise = simpleNoise(u * 120, v * 120, baseHue + 50) * 4;
+        const microNoise = simpleNoise(u * 200, v * 200, baseHue + 100) * 2;
+        r += detailNoise + fineNoise + microNoise;
+        g += (detailNoise + fineNoise + microNoise) * 0.85;
+        b += (detailNoise + fineNoise + microNoise) * 0.6;
+        
+        // 极地区域 - 更明显的六边形风暴
+        const polarDist = Math.abs(v - 0.5) * 2;
+        if (polarDist > 0.75) {
+          const polarIntensity = (polarDist - 0.75) / 0.25;
+          // 极地变暗变蓝
+          r = r * (1 - polarIntensity * 0.4);
+          g = g * (1 - polarIntensity * 0.3);
+          b = b * (1 - polarIntensity * 0.15) + polarIntensity * 15;
+        }
         
       } else if (type === 'ice_giant') {
-        // 冰巨星 - 柔和的蓝色大气带 + 云层
-        const atmosphereBand = Math.sin(v * Math.PI * 8) * 0.12 + 
-                               Math.sin(v * Math.PI * 4 + u * 2) * 0.08 +
-                               Math.sin(v * Math.PI * 16) * 0.04;
+        // 冰巨星 - 高对比度海王星/天王星风格，更丰富的细节
+        const bandFreq = 0.022 + seededRandom(10) * 0.008;
         
-        const gradientMix = v * 0.25 + 0.38 + atmosphereBand * 0.3;
-        const clampedGradient = Math.max(0.2, Math.min(0.8, gradientMix));
+        // 强烈的大气条纹 - 高对比度，更多层次
+        const band1 = Math.sin(v * resolution * bandFreq) * 0.55;
+        const band2 = Math.sin(v * resolution * bandFreq * 2.2 + seededRandom(11) * 2) * 0.38;
+        const band3 = Math.sin(v * resolution * bandFreq * 4.5) * 0.22;
+        const band4 = Math.sin(v * resolution * bandFreq * 0.5) * 0.3;
+        const band5 = Math.sin(v * resolution * bandFreq * 7) * 0.14;
+        const band6 = Math.sin(v * resolution * bandFreq * 12 + seededRandom(15) * 3) * 0.08;
         
-        r = palette.primary.r * (1 - clampedGradient) + palette.secondary.r * clampedGradient;
-        g = palette.primary.g * (1 - clampedGradient) + palette.secondary.g * clampedGradient;
-        b = palette.primary.b * (1 - clampedGradient) + palette.secondary.b * clampedGradient;
+        // 大气湍流 - 增强
+        const flow1 = Math.sin(u * Math.PI * 6 + v * 15) * 0.08;
+        const flow2 = Math.cos(u * Math.PI * 10 - v * 8) * 0.05;
+        const flow3 = Math.sin(u * Math.PI * 15 + v * 20) * 0.03;
+        const turbulence = Math.sin(u * Math.PI * 20 + v * 25) * Math.cos(v * Math.PI * 18) * 0.06;
+        const turbulence2 = Math.cos(u * Math.PI * 30 - v * 35) * Math.sin(v * Math.PI * 22) * 0.04;
         
-        // 云层高光（只增亮）
-        const cloudHighlight = Math.max(0, Math.sin(u * Math.PI * 12 + v * 8)) * 15;
-        r += cloudHighlight * 0.7;
-        g += cloudHighlight * 0.85;
-        b += cloudHighlight;
+        // 甲烷云层 - 更明显，多层
+        const methaneCloud1 = Math.sin(u * Math.PI * 12 + v * 18) * Math.cos(v * Math.PI * 10) * 0.1;
+        const methaneCloud2 = Math.cos(u * Math.PI * 8 - v * 12) * Math.sin(v * Math.PI * 15) * 0.06;
+        
+        const atmosphereBand = band1 + band2 + band3 + band4 + band5 + band6 + flow1 + flow2 + flow3 + turbulence + turbulence2 + methaneCloud1 + methaneCloud2;
+        
+        const gradientMix = v * 0.18 + 0.4 + atmosphereBand;
+        const clampedGradient = Math.max(0.03, Math.min(0.97, gradientMix));
+        
+        // 五色混合 - 更丰富的层次
+        if (clampedGradient < 0.2) {
+          const t = clampedGradient * 5;
+          r = palette.shadow.r * (1 - t) + palette.tertiary.r * t;
+          g = palette.shadow.g * (1 - t) + palette.tertiary.g * t;
+          b = palette.shadow.b * (1 - t) + palette.tertiary.b * t;
+        } else if (clampedGradient < 0.4) {
+          const t = (clampedGradient - 0.2) * 5;
+          r = palette.tertiary.r * (1 - t) + palette.primary.r * t;
+          g = palette.tertiary.g * (1 - t) + palette.primary.g * t;
+          b = palette.tertiary.b * (1 - t) + palette.primary.b * t;
+        } else if (clampedGradient < 0.6) {
+          const t = (clampedGradient - 0.4) * 5;
+          r = palette.primary.r * (1 - t) + palette.secondary.r * t;
+          g = palette.primary.g * (1 - t) + palette.secondary.g * t;
+          b = palette.primary.b * (1 - t) + palette.secondary.b * t;
+        } else if (clampedGradient < 0.8) {
+          const t = (clampedGradient - 0.6) * 5;
+          r = palette.secondary.r * (1 - t) + palette.highlight.r * t * 0.7;
+          g = palette.secondary.g * (1 - t) + palette.highlight.g * t * 0.7;
+          b = palette.secondary.b * (1 - t) + palette.highlight.b * t * 0.7;
+        } else {
+          const t = (clampedGradient - 0.8) * 5;
+          r = palette.highlight.r * 0.7 * (1 - t) + palette.secondary.r * t;
+          g = palette.highlight.g * 0.7 * (1 - t) + palette.secondary.g * t;
+          b = palette.highlight.b * 0.7 * (1 - t) + palette.secondary.b * t;
+        }
+        
+        // 亮带 - 高层甲烷冰晶云，非常明显
+        const brightBand1 = Math.sin(v * resolution * bandFreq * 1.5 + 0.5);
+        const brightBand2 = Math.sin(v * resolution * bandFreq * 3.3 - 0.8);
+        const brightBand3 = Math.sin(v * resolution * bandFreq * 5.5 + 1.2);
+        if (brightBand1 > 0.65) {
+          const intensity = (brightBand1 - 0.65) / 0.35;
+          r += intensity * 55;
+          g += intensity * 70;
+          b += intensity * 85;
+        }
+        if (brightBand2 > 0.7) {
+          const intensity = (brightBand2 - 0.7) / 0.3;
+          r += intensity * 40;
+          g += intensity * 55;
+          b += intensity * 70;
+        }
+        if (brightBand3 > 0.75) {
+          const intensity = (brightBand3 - 0.75) / 0.25;
+          r += intensity * 30;
+          g += intensity * 40;
+          b += intensity * 50;
+        }
+        
+        // 暗带 - 深层大气，更明显
+        const darkBand = Math.sin(v * resolution * bandFreq * 2.8 + 1.2);
+        const darkBand2 = Math.sin(v * resolution * bandFreq * 6 - 0.5);
+        if (darkBand < -0.55) {
+          const intensity = (-darkBand - 0.55) / 0.45;
+          r -= intensity * 40;
+          g -= intensity * 35;
+          b -= intensity * 20;
+        }
+        if (darkBand2 < -0.65) {
+          const intensity = (-darkBand2 - 0.65) / 0.35;
+          r -= intensity * 25;
+          g -= intensity * 20;
+          b -= intensity * 10;
+        }
+        
+        // 大暗斑风暴 - 更明显，更大
+        const stormX = 0.25 + seededRandom(20) * 0.5;
+        const stormY = 0.35 + seededRandom(21) * 0.3;
+        const stormDist = Math.sqrt(Math.pow((u - stormX) * 2.2, 2) + Math.pow((v - stormY) * 3.5, 2));
+        if (stormDist < 0.18) {
+          const stormIntensity = 1 - stormDist / 0.18;
+          const stormSwirl = Math.sin(stormDist * 35 + Math.atan2(v - stormY, u - stormX) * 5);
+          // 暗斑核心更暗
+          r -= stormIntensity * 50 + stormSwirl * 15;
+          g -= stormIntensity * 40 + stormSwirl * 12;
+          b -= stormIntensity * 20 + stormSwirl * 8;
+          // 风暴边缘亮环
+          if (stormDist > 0.12) {
+            const edgeBright = (stormDist - 0.12) / 0.06 * stormIntensity;
+            r += edgeBright * 30;
+            g += edgeBright * 40;
+            b += edgeBright * 50;
+          }
+        }
+        
+        // 小型涡旋 - 更多
+        for (let vi = 0; vi < 6; vi++) {
+          const vx = seededRandom(30 + vi) * 0.8 + 0.1;
+          const vy = seededRandom(40 + vi) * 0.6 + 0.2;
+          const vd = Math.sqrt(Math.pow((u - vx) * 3, 2) + Math.pow((v - vy) * 5, 2));
+          if (vd < 0.06) {
+            const vortexIntensity = (1 - vd / 0.06) * 0.7;
+            r += vortexIntensity * 35;
+            g += vortexIntensity * 45;
+            b += vortexIntensity * 55;
+          }
+        }
+        
+        // 极地 - 冰巨星极地明显更亮，更蓝
+        const polarDist = Math.abs(v - 0.5) * 2;
+        if (polarDist > 0.65) {
+          const polarIntensity = (polarDist - 0.65) / 0.35;
+          r += polarIntensity * 50;
+          g += polarIntensity * 65;
+          b += polarIntensity * 80;
+        }
+        
+        // 细节噪点 - 多层
+        const detailNoise = simpleNoise(u * 60, v * 60, baseHue) * 10;
+        const fineNoise = simpleNoise(u * 120, v * 120, baseHue + 40) * 5;
+        r += detailNoise * 0.4 + fineNoise * 0.3;
+        g += detailNoise * 0.6 + fineNoise * 0.5;
+        b += detailNoise + fineNoise;
         
       } else if (type === 'rocky') {
-        // 岩石行星 - 陨石坑和地形变化
-        const latitudeMix = Math.sin(v * Math.PI) * 0.2 + 0.4;
+        // 岩石行星 - 真实月球/水星风格，更丰富的陨石坑和地形
+        const latitudeMix = Math.sin(v * Math.PI) * 0.18 + 0.4;
         
-        // 模拟地形起伏
-        const terrain1 = Math.sin(u * Math.PI * 6 + v * 4) * 0.1;
-        const terrain2 = Math.sin(u * Math.PI * 14 + v * 10) * 0.05;
-        const terrainMix = latitudeMix + terrain1 + terrain2;
+        // 多层地形起伏 - 增强
+        const terrain1 = Math.sin(u * Math.PI * 8 + v * 5) * 0.15;
+        const terrain2 = Math.sin(u * Math.PI * 16 + v * 12) * 0.08;
+        const terrain3 = Math.cos(u * Math.PI * 4 - v * 3) * 0.1;
+        const terrain4 = Math.sin(u * Math.PI * 25 + v * 18) * 0.04;
+        const terrain5 = Math.cos(u * Math.PI * 32 - v * 25) * 0.025; // 微细地形
         
-        const clampedMix = Math.max(0.2, Math.min(0.8, terrainMix));
-        r = palette.primary.r * (1 - clampedMix) + palette.secondary.r * clampedMix;
-        g = palette.primary.g * (1 - clampedMix) + palette.secondary.g * clampedMix;
-        b = palette.primary.b * (1 - clampedMix) + palette.secondary.b * clampedMix;
+        // 高地和低地区域 - 更明显
+        const highland1 = Math.sin(u * Math.PI * 2 + v * 1.5) * Math.cos(v * Math.PI * 2.5);
+        const highland2 = Math.cos(u * Math.PI * 1.5 - v * 2) * Math.sin(v * Math.PI * 1.8);
+        const highland = Math.max(highland1, highland2 * 0.8);
+        const highlandMix = highland > 0.25 ? (highland - 0.25) * 0.4 : 0;
         
-        // 陨石坑效果（环形亮斑）
-        const craterNoise = simpleNoise(u * 20, v * 20, baseHue);
-        if (craterNoise > 0.85) {
-          const craterRim = (craterNoise - 0.85) / 0.15 * 20;
+        // 低地盆地
+        const lowland = Math.sin(u * Math.PI * 1.8 + 0.5) * Math.cos(v * Math.PI * 2.2 - 0.3);
+        const lowlandMix = lowland < -0.4 ? (-lowland - 0.4) * 0.25 : 0;
+        
+        const terrainMix = latitudeMix + terrain1 + terrain2 + terrain3 + terrain4 + terrain5 + highlandMix - lowlandMix;
+        const clampedMix = Math.max(0.1, Math.min(0.9, terrainMix));
+        
+        // 四色混合 - 更丰富的层次
+        if (clampedMix < 0.33) {
+          const t = clampedMix * 3;
+          r = palette.shadow.r * (1 - t) + palette.primary.r * t;
+          g = palette.shadow.g * (1 - t) + palette.primary.g * t;
+          b = palette.shadow.b * (1 - t) + palette.primary.b * t;
+        } else if (clampedMix < 0.66) {
+          const t = (clampedMix - 0.33) * 3;
+          r = palette.primary.r * (1 - t) + palette.secondary.r * t;
+          g = palette.primary.g * (1 - t) + palette.secondary.g * t;
+          b = palette.primary.b * (1 - t) + palette.secondary.b * t;
+        } else {
+          const t = (clampedMix - 0.66) * 3;
+          r = palette.secondary.r * (1 - t) + palette.tertiary.r * t;
+          g = palette.secondary.g * (1 - t) + palette.tertiary.g * t;
+          b = palette.secondary.b * (1 - t) + palette.tertiary.b * t;
+        }
+        
+        // 多尺度陨石坑 - 更多更真实
+        // 超大型撞击盆地
+        for (let bi = 0; bi < 3; bi++) {
+          const bx = seededRandom(20 + bi) * 0.7 + 0.15;
+          const by = seededRandom(25 + bi) * 0.6 + 0.2;
+          const br = 0.1 + seededRandom(30 + bi) * 0.08;
+          const dist = Math.sqrt(Math.pow(u - bx, 2) + Math.pow(v - by, 2));
+          if (dist < br) {
+            // 盆地内部更暗
+            const basinDepth = (1 - dist / br) * 20;
+            r -= basinDepth * 0.6;
+            g -= basinDepth * 0.6;
+            b -= basinDepth * 0.5;
+            // 边缘山脉
+            if (dist > br * 0.7 && dist < br) {
+              const rimHeight = Math.sin((dist - br * 0.7) / (br * 0.3) * Math.PI) * 15;
+              r += rimHeight;
+              g += rimHeight;
+              b += rimHeight * 0.9;
+            }
+          }
+        }
+        
+        // 大型陨石坑
+        for (let ci = 0; ci < 12; ci++) {
+          const cx = seededRandom(40 + ci) * 0.9 + 0.05;
+          const cy = seededRandom(50 + ci) * 0.8 + 0.1;
+          const cr = 0.03 + seededRandom(60 + ci) * 0.05;
+          const dist = Math.sqrt(Math.pow(u - cx, 2) + Math.pow(v - cy, 2));
+          if (dist < cr) {
+            const rimDist = Math.abs(dist - cr * 0.85) / (cr * 0.15);
+            if (rimDist < 1) {
+              const rimBright = (1 - rimDist) * 30;
+              r += rimBright;
+              g += rimBright;
+              b += rimBright * 0.95;
+            }
+            if (dist < cr * 0.7) {
+              const depth = (1 - dist / (cr * 0.7)) * 22;
+              r -= depth;
+              g -= depth;
+              b -= depth * 0.9;
+            }
+            // 中央峰
+            if (dist < cr * 0.2) {
+              const peakHeight = (1 - dist / (cr * 0.2)) * 12;
+              r += peakHeight;
+              g += peakHeight;
+              b += peakHeight * 0.9;
+            }
+          }
+        }
+        
+        // 中型陨石坑
+        const craterNoise1 = simpleNoise(u * 25, v * 25, baseHue);
+        if (craterNoise1 > 0.78) {
+          const craterRim = (craterNoise1 - 0.78) / 0.22 * 28;
           r += craterRim;
           g += craterRim;
-          b += craterRim;
+          b += craterRim * 0.9;
         }
+        
+        // 小型陨石坑密集区
+        const craterNoise2 = simpleNoise(u * 60, v * 60, baseHue + 30);
+        if (craterNoise2 > 0.85) {
+          const microCrater = (craterNoise2 - 0.85) / 0.15 * 15;
+          r -= microCrater * 0.6;
+          g -= microCrater * 0.6;
+          b -= microCrater * 0.5;
+        }
+        
+        // 射纹 (撞击辐射纹理)
+        for (let ri = 0; ri < 4; ri++) {
+          const rx = seededRandom(70 + ri) * 0.8 + 0.1;
+          const ry = seededRandom(75 + ri) * 0.7 + 0.15;
+          const angle = Math.atan2(v - ry, u - rx);
+          const dist = Math.sqrt(Math.pow(u - rx, 2) + Math.pow(v - ry, 2));
+          if (dist > 0.05 && dist < 0.2) {
+            const rayPattern = Math.sin(angle * 12) * 0.5 + 0.5;
+            const rayIntensity = rayPattern * (1 - (dist - 0.05) / 0.15) * 8;
+            r += rayIntensity;
+            g += rayIntensity;
+            b += rayIntensity * 0.9;
+          }
+        }
+        
+        // 表面尘埃纹理 - 多层
+        const dustNoise1 = simpleNoise(u * 80, v * 80, baseHue + 60) * 8;
+        const dustNoise2 = simpleNoise(u * 150, v * 150, baseHue + 90) * 4;
+        r += dustNoise1 + dustNoise2;
+        g += (dustNoise1 + dustNoise2) * 0.95;
+        b += (dustNoise1 + dustNoise2) * 0.88;
         
       } else if (type === 'lava') {
-        // 熔岩行星 - 暗色表面 + 发光裂缝
+        // 熔岩行星 - 更丰富的岩浆纹理，深棕暗紫色调
         r = palette.primary.r + 30;
-        g = palette.primary.g + 18;
-        b = palette.primary.b + 12;
+        g = palette.primary.g + 20;
+        b = palette.primary.b + 22;
         
-        // 多层熔岩裂缝
-        const lava1 = Math.sin(u * Math.PI * 10 + v * 2) * Math.sin(v * Math.PI * 8);
-        const lava2 = Math.sin(u * Math.PI * 6 - v * 4) * Math.sin(v * Math.PI * 5 + u * 3);
-        const lavaStripe = Math.max(lava1, lava2);
+        // 多层岩石纹理 - 增强
+        const rock1 = Math.sin(u * Math.PI * 15 + v * 8) * Math.cos(v * Math.PI * 12 + u * 5);
+        const rock2 = Math.sin(u * Math.PI * 8 - v * 6) * Math.cos(v * Math.PI * 10 - u * 4);
+        const rock3 = Math.sin(u * Math.PI * 20 + v * 15) * 0.4;
+        const rock4 = Math.cos(u * Math.PI * 25 - v * 20) * 0.25;
+        const rock5 = Math.sin(u * Math.PI * 35 + v * 28) * 0.15; // 细节纹理
+        const rockTexture = (rock1 + rock2 * 0.7 + rock3 + rock4 + rock5) * 0.5;
         
-        if (lavaStripe > 0.6) {
-          const glowAmount = (lavaStripe - 0.6) / 0.4;
-          const glow = glowAmount * glowAmount; // 平方使边缘更锐利
-          r += glow * (palette.highlight.r - palette.primary.r) * 0.7;
-          g += glow * (palette.highlight.g - palette.primary.g) * 0.5;
-          b += glow * (palette.highlight.b - palette.primary.b) * 0.3;
+        // 岩石表面细节
+        r += rockTexture * 25;
+        g += rockTexture * 18;
+        b += rockTexture * 15;
+        
+        // 冷却岩石区域 - 更暗的斑块
+        const cooledRock = Math.sin(u * Math.PI * 5 + v * 3) * Math.cos(v * Math.PI * 4);
+        if (cooledRock > 0.4) {
+          const coolIntensity = (cooledRock - 0.4) / 0.6;
+          r -= coolIntensity * 15;
+          g -= coolIntensity * 12;
+          b -= coolIntensity * 8;
         }
         
+        // 熔岩裂缝 - 更细更少，但更亮
+        const lava1 = Math.sin(u * Math.PI * 12 + v * 3) * Math.sin(v * Math.PI * 10);
+        const lava2 = Math.sin(u * Math.PI * 7 - v * 5) * Math.sin(v * Math.PI * 6 + u * 4);
+        const lava3 = Math.sin(u * Math.PI * 18 + v * 8) * Math.sin(v * Math.PI * 15 - u * 6);
+        const lavaStripe = Math.max(lava1, lava2, lava3 * 0.7);
+        
+        if (lavaStripe > 0.78) { // 更高阈值，裂缝更少
+          const glowAmount = (lavaStripe - 0.78) / 0.22;
+          const glow = glowAmount * glowAmount;
+          // 熔岩发光 - 橙红色
+          r += glow * 80;
+          g += glow * 40;
+          b += glow * 15;
+        }
+        
+        // 熔岩湖泊
+        for (let li = 0; li < 3; li++) {
+          const lx = seededRandom(80 + li) * 0.7 + 0.15;
+          const ly = seededRandom(85 + li) * 0.6 + 0.2;
+          const lr = 0.04 + seededRandom(90 + li) * 0.03;
+          const dist = Math.sqrt(Math.pow(u - lx, 2) + Math.pow(v - ly, 2));
+          if (dist < lr) {
+            const lakeIntensity = 1 - dist / lr;
+            // 熔岩湖发光
+            r += lakeIntensity * 60;
+            g += lakeIntensity * 25;
+            b += lakeIntensity * 8;
+          }
+        }
+        
+        // 陨石坑纹理 - 更多
+        for (let ci = 0; ci < 6; ci++) {
+          const cx = seededRandom(100 + ci) * 0.85 + 0.075;
+          const cy = seededRandom(110 + ci) * 0.75 + 0.125;
+          const cr = 0.025 + seededRandom(120 + ci) * 0.035;
+          const dist = Math.sqrt(Math.pow(u - cx, 2) + Math.pow(v - cy, 2));
+          if (dist < cr) {
+            if (dist < cr * 0.7) {
+              const depth = (1 - dist / (cr * 0.7)) * 18;
+              r -= depth;
+              g -= depth * 0.8;
+              b -= depth * 0.7;
+            }
+            // 坑边缘
+            if (dist > cr * 0.75) {
+              const rimBright = (dist - cr * 0.75) / (cr * 0.25) * 12;
+              r += rimBright;
+              g += rimBright * 0.8;
+              b += rimBright * 0.6;
+            }
+          }
+        }
+        
+        // 表面纹理噪点
+        const surfaceNoise = simpleNoise(u * 70, v * 70, baseHue + 40) * 10;
+        r += surfaceNoise * 0.8;
+        g += surfaceNoise * 0.6;
+        b += surfaceNoise * 0.5;
+        
       } else if (type === 'ocean') {
-        // 海洋行星 - 蓝色海洋 + 云层
+        // 海洋行星 - 高对比度地球风格，深蓝海洋、明显大陆、白云
+        
+        // 深蓝海洋基础色
         r = palette.primary.r;
         g = palette.primary.g;
         b = palette.primary.b;
         
-        // 海洋深浅变化
-        const oceanDepth = Math.sin(v * Math.PI) * 0.2 + Math.sin(u * Math.PI * 4 + v * 2) * 0.08;
-        r += oceanDepth * 25;
-        g += oceanDepth * 35;
-        b += oceanDepth * 45;
+        // 海洋深浅变化 - 更明显的洋流和深度
+        const oceanDepth1 = Math.sin(v * Math.PI) * 0.2;
+        const oceanDepth2 = Math.sin(u * Math.PI * 4 + v * 2.5) * 0.12;
+        const oceanDepth3 = Math.cos(u * Math.PI * 7 - v * 5) * 0.08;
+        const oceanCurrent1 = Math.sin(u * Math.PI * 10 + v * 15) * 0.05;
+        const oceanCurrent2 = Math.cos(u * Math.PI * 6 - v * 8) * 0.04;
+        const oceanDepth = oceanDepth1 + oceanDepth2 + oceanDepth3 + oceanCurrent1 + oceanCurrent2;
         
-        // 云层（白色高光）
-        const cloud = Math.sin(u * Math.PI * 6 + v * 3) * Math.sin(v * Math.PI * 4);
-        if (cloud > 0.5) {
-          const cloudIntensity = (cloud - 0.5) / 0.5 * 30;
-          r += cloudIntensity;
-          g += cloudIntensity;
-          b += cloudIntensity * 0.9;
+        // 浅水区更亮更绿
+        r += oceanDepth * 15;
+        g += oceanDepth * 40;
+        b += oceanDepth * 55;
+        
+        // 深海沟 - 更暗
+        const trench = Math.sin(u * Math.PI * 2 + 0.5) * Math.cos(v * Math.PI * 3);
+        if (trench < -0.6) {
+          const trenchDepth = (-trench - 0.6) / 0.4;
+          r -= trenchDepth * 15;
+          g -= trenchDepth * 20;
+          b -= trenchDepth * 10;
         }
         
+        // 大陆板块 - 更大更明显
+        const continent1 = Math.sin(u * Math.PI * 2.2 + 0.2) * Math.cos(v * Math.PI * 1.5 + 0.3);
+        const continent2 = Math.sin(u * Math.PI * 2.8 - 1.5) * Math.cos(v * Math.PI * 1.8 - 0.6);
+        const continent3 = Math.sin(u * Math.PI * 1.5 + 2.5) * Math.cos(v * Math.PI * 2.2 + 1.2);
+        const continent4 = Math.sin(u * Math.PI * 3.5 + 0.8) * Math.cos(v * Math.PI * 2.5 - 1.0);
+        
+        const landMass = Math.max(continent1, continent2 * 0.85, continent3 * 0.7, continent4 * 0.6);
+        if (landMass > 0.25) {
+          const landIntensity = Math.min(1, (landMass - 0.25) / 0.5);
+          
+          // 陆地颜色 - 更鲜明的绿色和棕色
+          const baseGreen = 100 + landIntensity * 80;
+          const baseBrown = 70 + landIntensity * 50;
+          
+          // 植被区域（靠近海岸更绿）
+          const vegetation = Math.sin(u * Math.PI * 15 + v * 10) * 0.3 + 0.5;
+          const landR = baseBrown + vegetation * 30;
+          const landG = baseGreen + vegetation * 40;
+          const landB = 50 + vegetation * 20;
+          
+          r = r * (1 - landIntensity * 0.9) + landR * landIntensity * 0.9;
+          g = g * (1 - landIntensity * 0.9) + landG * landIntensity * 0.9;
+          b = b * (1 - landIntensity * 0.9) + landB * landIntensity * 0.9;
+          
+          // 山脉 - 更高更亮
+          const mountain1 = Math.sin(u * Math.PI * 25 + v * 18) * Math.cos(v * Math.PI * 22);
+          const mountain2 = Math.sin(u * Math.PI * 18 - v * 12) * Math.cos(u * Math.PI * 20);
+          const mountain = Math.max(mountain1, mountain2);
+          if (mountain > 0.6 && landIntensity > 0.4) {
+            const mountainHeight = (mountain - 0.6) / 0.4 * 35;
+            r += mountainHeight;
+            g += mountainHeight * 0.85;
+            b += mountainHeight * 0.6;
+          }
+          
+          // 沙漠区域（内陆）
+          const desertZone = Math.sin(u * Math.PI * 3 + 1.2) * Math.cos(v * Math.PI * 2.5);
+          if (desertZone > 0.5 && landIntensity > 0.5) {
+            const desertIntensity = (desertZone - 0.5) / 0.5 * landIntensity;
+            r += desertIntensity * 50;
+            g += desertIntensity * 30;
+            b -= desertIntensity * 20;
+          }
+        }
+        
+        // 极地冰盖 - 更大更白
+        const polarDist = Math.abs(v - 0.5) * 2;
+        if (polarDist > 0.7) {
+          const iceIntensity = (polarDist - 0.7) / 0.3;
+          const iceCap = Math.pow(iceIntensity, 1.5);
+          r = r * (1 - iceCap * 0.85) + 250 * iceCap * 0.85;
+          g = g * (1 - iceCap * 0.85) + 252 * iceCap * 0.85;
+          b = b * (1 - iceCap * 0.85) + 255 * iceCap * 0.85;
+        }
+        
+        // 云层系统 - 更明显的白云
+        const cloud1 = Math.sin(u * Math.PI * 6 + v * 3) * Math.cos(v * Math.PI * 5);
+        const cloud2 = Math.sin(u * Math.PI * 10 - v * 6) * 0.7;
+        const cloud3 = Math.sin(u * Math.PI * 4 + v * 8) * Math.cos(u * Math.PI * 12) * 0.5;
+        const cloud4 = Math.sin(u * Math.PI * 15 + v * 5) * 0.4;
+        const cloudCover = Math.max(cloud1, cloud2, cloud3, cloud4);
+        
+        if (cloudCover > 0.35) {
+          const cloudIntensity = (cloudCover - 0.35) / 0.65;
+          const cloudBright = cloudIntensity * 60;
+          r += cloudBright;
+          g += cloudBright;
+          b += cloudBright * 0.95;
+        }
+        
+        // 飓风/气旋
+        for (let hi = 0; hi < 2; hi++) {
+          const hx = seededRandom(50 + hi) * 0.6 + 0.2;
+          const hy = 0.3 + seededRandom(55 + hi) * 0.4;
+          const hd = Math.sqrt(Math.pow((u - hx) * 2.5, 2) + Math.pow((v - hy) * 3, 2));
+          if (hd < 0.08) {
+            const spiralAngle = Math.atan2(v - hy, u - hx);
+            const spiral = Math.sin(hd * 80 + spiralAngle * 3);
+            const hurricaneCloud = (1 - hd / 0.08) * (spiral * 0.5 + 0.5) * 40;
+            r += hurricaneCloud;
+            g += hurricaneCloud;
+            b += hurricaneCloud * 0.9;
+          }
+        }
+        
+        // 大气散射 - 边缘更蓝
+        const atmosphereScatter = Math.pow(Math.abs(v - 0.5) * 2, 0.6) * 0.15;
+        g += atmosphereScatter * 8;
+        b += atmosphereScatter * 25;
+        
       } else if (type === 'desert') {
-        // 沙漠行星 - 沙丘纹理
-        const dune1 = Math.sin(v * Math.PI * 5 + u * 1.5) * 0.2;
-        const dune2 = Math.sin(v * Math.PI * 12 + u * 3) * 0.08;
-        const desertBand = dune1 + dune2 + 0.5;
+        // 沙漠行星 - 真实火星风格，沙丘、峡谷、尘暴
         
-        const clampedBand = Math.max(0.25, Math.min(0.75, desertBand));
-        r = palette.primary.r * (1 - clampedBand) + palette.secondary.r * clampedBand;
-        g = palette.primary.g * (1 - clampedBand) + palette.secondary.g * clampedBand;
-        b = palette.primary.b * (1 - clampedBand) + palette.secondary.b * clampedBand;
+        // 基础颜色
+        const baseMix = Math.sin(v * Math.PI) * 0.1 + 0.45;
+        r = palette.primary.r * (1 - baseMix) + palette.secondary.r * baseMix;
+        g = palette.primary.g * (1 - baseMix) + palette.secondary.g * baseMix;
+        b = palette.primary.b * (1 - baseMix) + palette.secondary.b * baseMix;
         
-        // 沙尘暴高光
-        const dustHighlight = simpleNoise(u * 30, v * 30, baseHue) * 12;
-        r += dustHighlight;
-        g += dustHighlight * 0.85;
-        b += dustHighlight * 0.6;
+        // 多层沙丘系统
+        const dune1 = Math.sin(v * Math.PI * 6 + u * 2) * 0.18;
+        const dune2 = Math.sin(v * Math.PI * 14 + u * 4) * 0.1;
+        const dune3 = Math.sin(v * Math.PI * 25 + u * 8) * 0.05;
+        const dune4 = Math.cos(u * Math.PI * 3 + v * 5) * 0.12; // 横向沙丘
+        const dunePattern = dune1 + dune2 + dune3 + dune4;
+        
+        r += dunePattern * 25;
+        g += dunePattern * 18;
+        b += dunePattern * 8;
+        
+        // 峡谷和裂谷系统
+        const canyon1 = Math.sin(u * Math.PI * 1.5 + 0.8) * Math.cos(v * Math.PI * 8);
+        const canyon2 = Math.sin(u * Math.PI * 2.2 - 1.5) * Math.cos(v * Math.PI * 6 + u * 3);
+        if (canyon1 > 0.75 || canyon2 > 0.8) {
+          const canyonDepth = Math.max((canyon1 - 0.75) / 0.25, (canyon2 - 0.8) / 0.2) * 0.6;
+          r -= canyonDepth * 35;
+          g -= canyonDepth * 30;
+          b -= canyonDepth * 20;
+        }
+        
+        // 高地区域 - 更亮的岩石
+        const highland = Math.sin(u * Math.PI * 2.8 + v * 1.2) * Math.cos(v * Math.PI * 2);
+        if (highland > 0.5) {
+          const highlandBright = (highland - 0.5) / 0.5 * 20;
+          r += highlandBright;
+          g += highlandBright * 0.85;
+          b += highlandBright * 0.6;
+        }
+        
+        // 陨石坑
+        for (let ci = 0; ci < 6; ci++) {
+          const cx = seededRandom(70 + ci) * 0.85 + 0.075;
+          const cy = seededRandom(80 + ci) * 0.7 + 0.15;
+          const cr = 0.03 + seededRandom(90 + ci) * 0.05;
+          const dist = Math.sqrt(Math.pow(u - cx, 2) + Math.pow(v - cy, 2));
+          if (dist < cr) {
+            const rimDist = Math.abs(dist - cr * 0.8) / (cr * 0.2);
+            if (rimDist < 1) {
+              const rimBright = (1 - rimDist) * 18;
+              r += rimBright;
+              g += rimBright * 0.9;
+              b += rimBright * 0.7;
+            }
+            if (dist < cr * 0.6) {
+              const depth = (1 - dist / (cr * 0.6)) * 15;
+              r -= depth;
+              g -= depth * 0.9;
+              b -= depth * 0.7;
+            }
+          }
+        }
+        
+        // 极地冰盖 - 火星风格的干冰
+        const polarDist = Math.abs(v - 0.5) * 2;
+        if (polarDist > 0.8) {
+          const iceIntensity = (polarDist - 0.8) / 0.2;
+          r = r * (1 - iceIntensity * 0.5) + 230 * iceIntensity * 0.5;
+          g = g * (1 - iceIntensity * 0.5) + 225 * iceIntensity * 0.5;
+          b = b * (1 - iceIntensity * 0.5) + 220 * iceIntensity * 0.5;
+        }
+        
+        // 沙尘暴纹理
+        const dustStorm = simpleNoise(u * 20, v * 20, baseHue) * 0.5 + 
+                          simpleNoise(u * 40, v * 40, baseHue + 20) * 0.3;
+        if (dustStorm > 0.6) {
+          const stormIntensity = (dustStorm - 0.6) / 0.4 * 15;
+          r += stormIntensity;
+          g += stormIntensity * 0.8;
+          b += stormIntensity * 0.5;
+        }
+        
+        // 表面细节噪点
+        const surfaceNoise = simpleNoise(u * 70, v * 70, baseHue + 40) * 8;
+        r += surfaceNoise;
+        g += surfaceNoise * 0.85;
+        b += surfaceNoise * 0.6;
       } else {
         r = palette.primary.r;
         g = palette.primary.g;
@@ -866,8 +1484,57 @@ const PlanetOrnaments = ({
   const targetNdc = useRef(new THREE.Vector2());
   const proj = useRef(new THREE.Vector3());
 
-  // 生成真实天文行星数据
+  // 生成真实天文行星数据 - 带碰撞检测
   const data = useMemo(() => {
+    // 存储已生成的星球位置和大小，用于碰撞检测
+    const placedPlanets: { pos: THREE.Vector3; radius: number }[] = [];
+    
+    // 碰撞检测函数 - 检查新位置是否与已有星球碰撞
+    const checkCollision = (newPos: THREE.Vector3, newRadius: number): boolean => {
+      for (const planet of placedPlanets) {
+        const distance = newPos.distanceTo(planet.pos);
+        // 两球体积不重叠的最小距离 = 两球半径之和 + 安全间隙
+        const minDistance = (newRadius + planet.radius) * 1.3; // 30%安全间隙
+        if (distance < minDistance) {
+          return true; // 发生碰撞
+        }
+      }
+      return false; // 无碰撞
+    };
+    
+    // 生成不碰撞的位置
+    const generateNonCollidingPosition = (
+      baseRadius: number, 
+      radiusVariation: number, 
+      planetRadius: number,
+      maxAttempts: number = 50
+    ): THREE.Vector3 => {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const radius = baseRadius + Math.random() * radiusVariation;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        
+        const pos = new THREE.Vector3(
+          radius * Math.sin(phi) * Math.cos(theta),
+          radius * Math.cos(phi) * 0.7, // Y压扁
+          radius * Math.sin(phi) * Math.sin(theta)
+        );
+        
+        if (!checkCollision(pos, planetRadius)) {
+          return pos;
+        }
+      }
+      // 如果多次尝试都碰撞，增大半径重试
+      const fallbackRadius = baseRadius * 1.5 + Math.random() * radiusVariation * 2;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      return new THREE.Vector3(
+        fallbackRadius * Math.sin(phi) * Math.cos(theta),
+        fallbackRadius * Math.cos(phi) * 0.7,
+        fallbackRadius * Math.sin(phi) * Math.sin(theta)
+      );
+    };
+    
     return new Array(maxCount).fill(0).map((_, i) => {
       // 根据索引分配不同层次的星球
       const depthLayer = i / maxCount; // 0-1 用于深度分层
@@ -875,63 +1542,69 @@ const PlanetOrnaments = ({
       // 每颗星球独特的随机种子
       const planetSeed = i * 1000 + Math.random() * 100;
       
-      // 聚合态位置 - 闪电内部精致分布
+      // 聚合态位置 - 闪电内部精致分布（也需要碰撞检测）
       const hollowRadius = 18;
       const hollowHeight = 50;
-      const anchor = new THREE.Vector3(
-        (Math.random() - 0.5) * hollowRadius,
-        (Math.random() - 0.5) * hollowHeight,
-        (Math.random() - 0.5) * 12
-      );
+      let anchor: THREE.Vector3;
+      let anchorAttempts = 0;
+      do {
+        anchor = new THREE.Vector3(
+          (Math.random() - 0.5) * hollowRadius,
+          (Math.random() - 0.5) * hollowHeight,
+          (Math.random() - 0.5) * 12
+        );
+        anchorAttempts++;
+      } while (anchorAttempts < 20 && placedPlanets.slice(0, Math.min(i, 20)).some(p => 
+        anchor.distanceTo(p.pos) < 3
+      ));
 
       // 散开态位置 - 使用球面均匀分布，确保各个方向都有星球
       // 近处大星球，远处小星球 - 远处更多
-      let radius: number;
+      let baseRadiusDist: number;
+      let radiusVariation: number;
       let sizeMultiplier: number;
       
       if (depthLayer < 0.08) {
         // 前景层 - 近处超大星球（少）
-        radius = 120 + Math.random() * 100;
-        sizeMultiplier = 6.0 + Math.random() * 4.0; // 6-10
+        baseRadiusDist = 150;
+        radiusVariation = 80;
+        sizeMultiplier = 5.0 + Math.random() * 3.0; // 5-8
       } else if (depthLayer < 0.2) {
         // 中近景层 - 大星球
-        radius = 220 + Math.random() * 130;
-        sizeMultiplier = 3.5 + Math.random() * 2.5; // 3.5-6
+        baseRadiusDist = 250;
+        radiusVariation = 100;
+        sizeMultiplier = 3.0 + Math.random() * 2.0; // 3-5
       } else if (depthLayer < 0.4) {
         // 中景层 - 中等星球
-        radius = 350 + Math.random() * 150;
-        sizeMultiplier = 1.8 + Math.random() * 1.7; // 1.8-3.5
+        baseRadiusDist = 380;
+        radiusVariation = 120;
+        sizeMultiplier = 1.5 + Math.random() * 1.5; // 1.5-3
       } else if (depthLayer < 0.65) {
         // 远景层 - 较小星球（更多）
-        radius = 500 + Math.random() * 200;
-        sizeMultiplier = 0.8 + Math.random() * 1.0; // 0.8-1.8
+        baseRadiusDist = 550;
+        radiusVariation = 150;
+        sizeMultiplier = 0.7 + Math.random() * 0.8; // 0.7-1.5
       } else {
         // 最远层 - 小星球/卫星（最多）
-        radius = 700 + Math.random() * 250;
-        sizeMultiplier = 0.3 + Math.random() * 0.5; // 0.3-0.8
+        baseRadiusDist = 750;
+        radiusVariation = 200;
+        sizeMultiplier = 0.3 + Math.random() * 0.4; // 0.3-0.7
       }
       
-      // 使用球面坐标系实现均匀分布
-      // theta: 水平角度 0-2π (绕Y轴)
-      // phi: 垂直角度，使用 acos 确保均匀分布
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
+      // 计算星球实际半径（用于碰撞检测）
+      const actualPlanetRadius = sizeMultiplier * 1.2; // 基础半径 * 大小系数
       
-      // 转换为笛卡尔坐标 (标准球面坐标)
-      const chaosPos = new THREE.Vector3(
-        radius * Math.sin(phi) * Math.cos(theta),  // X
-        radius * Math.cos(phi) * 0.7,               // Y (压扁，更符合屏幕比例)
-        radius * Math.sin(phi) * Math.sin(theta)   // Z
-      );
+      // 生成不碰撞的位置
+      const chaosPos = generateNonCollidingPosition(baseRadiusDist, radiusVariation, actualPlanetRadius);
+      
+      // 记录已放置的星球
+      placedPlanets.push({ pos: chaosPos.clone(), radius: actualPlanetRadius });
 
       // 选择星球类型 - 确保每颗星球类型不同
       const preset = CINEMATIC_PLANET_PRESETS[i % CINEMATIC_PLANET_PRESETS.length];
       const planetSize = sizeMultiplier;
       
       // 不再做视觉补偿，保留真实的近大远小透视效果
-      const camPos = new THREE.Vector3(0, 0, 320); // 摄像机默认位置
-      const distToCamera = chaosPos.distanceTo(camPos);
-      const refDist = 320; // 参考距离
       const compensatedSize = sizeMultiplier; // 直接使用原始大小，不补偿
 
       // 使用 planet.tsx 风格的纹理生成
@@ -939,9 +1612,9 @@ const PlanetOrnaments = ({
       const baseColor = getPlanetBaseColor(preset.type, preset.hue);
       const texture = generateProceduralTexture(textureType, baseColor);
       
-      // 只有大型气态行星才有环（类土星）
-      const hasRing = (preset.type === 'gas_giant') && 
-                      planetSize > 2.0 && Math.random() > 0.4;
+      // 只有气态巨行星有环（类土星），蓝色星球不加环
+      const hasRing = preset.type === 'gas_giant' && 
+                      planetSize > 1.0 && Math.random() > 0.25;
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
       // 星环倾斜角度 - 确保始终有明显倾斜，避免荷包蛋效果
       const ringTilt = Math.PI / 3 + Math.random() * Math.PI / 6; // 60° 到 90° 倾斜
@@ -955,7 +1628,7 @@ const PlanetOrnaments = ({
           case 'gas_giant': return new THREE.Color('#c9a055'); // 棕金色
           case 'ice_giant': return new THREE.Color('#7090c0'); // 蓝色
           case 'ocean': return new THREE.Color('#4a8fcc'); // 天蓝色
-          case 'lava': return new THREE.Color('#a04030'); // 红色
+          case 'lava': return new THREE.Color('#805040'); // 柔和棕色
           case 'desert': return new THREE.Color('#b08050'); // 棕色
           default: return new THREE.Color('#8090a0'); // 灰蓝色
         }
@@ -1094,7 +1767,7 @@ const PlanetOrnaments = ({
                 map={obj.texture}
                 roughness={obj.preset.type === 'gas_giant' ? 0.85 : obj.preset.type === 'ice_giant' ? 0.8 : 0.9}
                 metalness={0.0}
-                emissive={obj.preset.type === 'lava' ? new THREE.Color('#ff3000') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
+                emissive={obj.preset.type === 'lava' ? new THREE.Color('#704030') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
                 emissiveIntensity={obj.preset.type === 'lava' ? 0.25 : 0.05}
                 envMapIntensity={0.15}
               />
@@ -1540,7 +2213,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const preset = CINEMATIC_PLANET_PRESETS[(i + 5) % CINEMATIC_PLANET_PRESETS.length]; // 偏移确保多样性
       
       // 使用原来的纹理生成方式
-      const texture = createCinematicPlanetTexture(preset.type, preset.hue, planetSeed);
+      const texture = createCinematicPlanetTexture(preset.hue, preset.type, size, planetSeed);
       
       const hasRing = preset.type === 'gas_giant' && size > 1.5 && Math.random() > 0.5;
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
@@ -1553,7 +2226,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           case 'gas_giant': return new THREE.Color('#c9a055');
           case 'ice_giant': return new THREE.Color('#7090c0');
           case 'ocean': return new THREE.Color('#4a8fcc');
-          case 'lava': return new THREE.Color('#a04030');
+          case 'lava': return new THREE.Color('#805040'); // 柔和棕色
           case 'desert': return new THREE.Color('#b08050');
           default: return new THREE.Color('#8090a0');
         }
@@ -1611,7 +2284,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
               map={planet.texture}
               roughness={0.9}
               metalness={0.0}
-              emissive={planet.preset.type === 'lava' ? new THREE.Color('#ff3000') : undefined}
+              emissive={planet.preset.type === 'lava' ? new THREE.Color('#704030') : undefined}
               emissiveIntensity={planet.preset.type === 'lava' ? 0.2 : 0.02}
             />
           </mesh>
@@ -1644,6 +2317,899 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           )}
         </group>
       ))}
+    </group>
+  );
+};
+
+// --- Component: Flowing Stars (流动星空) ---
+const FlowingStars = () => {
+  const starsRef = useRef<THREE.Points>(null);
+  
+  const { positions, velocities, colors, sizes } = useMemo(() => {
+    const count = 20000; // 增加到20000个粒子
+    const positions = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    
+    for (let i = 0; i < count; i++) {
+      // 使用平方根分布，让星星从中心向外渐变
+      const u = Math.random();
+      const radiusRatio = Math.sqrt(u); // 平方根让更多星星在外围
+      const radius = 200 + radiusRatio * 900; // 200-1100 范围
+      
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.cos(phi);
+      positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      
+      // 流动速度 - 向外扩散，增大速度
+      velocities[i * 3] = (Math.random() - 0.5) * 1.5;
+      velocities[i * 3 + 1] = (Math.random() - 0.5) * 1.0;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 1.5;
+      
+      // 颜色变化 - 远处更暗，增加一些蓝色和紫色调
+      const colorVariation = Math.random();
+      const distanceFade = 1 - (radiusRatio * 0.3);
+      
+      // 随机添加不同色调
+      const colorType = Math.random();
+      if (colorType < 0.7) {
+        // 大部分是白色/淡蓝色
+        colors[i * 3] = (0.7 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 1] = (0.7 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 2] = (0.85 + colorVariation * 0.15) * distanceFade;
+      } else if (colorType < 0.9) {
+        // 一些淡紫色
+        colors[i * 3] = (0.6 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 1] = (0.5 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 2] = (0.8 + colorVariation * 0.2) * distanceFade;
+      } else {
+        // 少量青色
+        colors[i * 3] = (0.4 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 1] = (0.7 + colorVariation * 0.3) * distanceFade;
+        colors[i * 3 + 2] = (0.9 + colorVariation * 0.1) * distanceFade;
+      }
+      
+      // 大小变化 - 近处大，远处小，增加尺寸多样性
+      sizes[i] = (Math.random() * 2.5 + 0.5) * (1.8 - radiusRatio * 0.6);
+    }
+    
+    return { positions, velocities, colors, sizes };
+  }, []);
+  
+  // 自定义星星着色器（十字形，支持近大远小）
+  const starMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {},
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          
+          // 使用视图空间的 Z 深度（相机空间距离）
+          vViewZDepth = -mvPosition.z;
+          
+          // 近大远小：基于视图空间深度
+          float distanceScale = 1.0 / (1.0 + vViewZDepth * 0.002);
+          gl_PointSize = size * distanceScale * (400.0 / vViewZDepth);
+          
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          vec2 center = gl_PointCoord - 0.5;
+          
+          // 计算十字形状
+          float horizontal = abs(center.y);
+          float vertical = abs(center.x);
+          
+          // 十字的宽度和长度
+          float crossWidth = 0.08;
+          float crossLength = 0.5;
+          
+          // 判断是否在十字范围内
+          bool inCross = (horizontal < crossWidth && vertical < crossLength) || 
+                        (vertical < crossWidth && horizontal < crossLength);
+          
+          if (!inCross) discard;
+          
+          // 计算到中心的距离，用于渐变
+          float dist = min(
+            horizontal < crossWidth ? vertical : 1.0,
+            vertical < crossWidth ? horizontal : 1.0
+          );
+          
+          // 中心亮，边缘暗
+          float alpha = 1.0 - smoothstep(0.0, crossLength, dist);
+          alpha = pow(alpha, 0.8) * 0.9;
+          
+          // 远处的星星更暗一些
+          float distanceFade = 1.0 - smoothstep(300.0, 1200.0, vViewZDepth);
+          alpha *= (0.4 + distanceFade * 0.5); // 稍微降低透明度
+          
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+  }, []);
+  
+  // 星星流动动画
+  useFrame((_, delta) => {
+    if (starsRef.current) {
+      const pos = starsRef.current.geometry.attributes.position.array as Float32Array;
+      
+      for (let i = 0; i < pos.length / 3; i++) {
+        // 应用速度，加快流动
+        pos[i * 3] += velocities[i * 3] * delta * 50;
+        pos[i * 3 + 1] += velocities[i * 3 + 1] * delta * 50;
+        pos[i * 3 + 2] += velocities[i * 3 + 2] * delta * 50;
+        
+        // 边界检测 - 超出范围重置
+        const dist = Math.sqrt(
+          pos[i * 3] ** 2 + 
+          pos[i * 3 + 1] ** 2 + 
+          pos[i * 3 + 2] ** 2
+        );
+        
+        if (dist > 1300 || dist < 180) {
+          const u = Math.random();
+          const radiusRatio = Math.sqrt(u);
+          const radius = 200 + radiusRatio * 900;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          
+          pos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+          pos[i * 3 + 1] = radius * Math.cos(phi);
+          pos[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+        }
+      }
+      
+      starsRef.current.geometry.attributes.position.needsUpdate = true;
+    }
+  });
+  
+  return (
+    <points ref={starsRef} material={starMaterial}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
+      </bufferGeometry>
+    </points>
+  );
+};
+
+// --- Component: Milky Way Galaxy (银河背景 - 流动星尘) ---
+const MilkyWayGalaxy = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const particlesRef = useRef<THREE.Points>(null);
+  
+  // 生成银河星尘粒子 - 螺旋结构
+  const { positions, colors, sizes } = useMemo(() => {
+    const count = 8000; // 减少粒子数量
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    
+    // 银河参数
+    const arms = 5; // 5条旋臂
+    const armWidth = 0.5; // 旋臂宽度散布
+    const coreRadius = 150; // 核心半径
+    
+    for (let i = 0; i < count; i++) {
+      // 随机选择一条旋臂
+      const armIndex = i % arms;
+      const armAngle = (armIndex / arms) * Math.PI * 2;
+      
+      // 距离中心的距离 (0 ~ 1)
+      const distance = Math.pow(Math.random(), 1.5); // 稍微聚集在中心
+      const radius = coreRadius + distance * 1000;
+      
+      // 螺旋角：随半径增加而旋转
+      const spiralAngle = distance * Math.PI * 4; // 旋转两圈
+      
+      // 随机散布
+      const randomOffset = (Math.random() - 0.5) * armWidth * (2.0 - distance); // 外围散布更小，保持形状
+      const angle = armAngle + spiralAngle + randomOffset;
+      
+      // 垂直散布：中心厚，边缘薄
+      const heightSpread = 80 * (1 - distance * 0.6);
+      const height = (Math.random() - 0.5) * heightSpread;
+      
+      positions[i * 3] = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = height;
+      positions[i * 3 + 2] = Math.sin(angle) * radius;
+      
+      // 颜色分布
+      // 核心：金/白 -> 中间：紫/红 -> 边缘：深蓝/紫
+      const mixRatio = distance;
+      
+      let r, g, b;
+      if (mixRatio < 0.2) {
+        // 核心区域 - 金白色
+        r = 1.0;
+        g = 0.9 + Math.random() * 0.1;
+        b = 0.7 + Math.random() * 0.3;
+      } else if (mixRatio < 0.6) {
+        // 中间区域 - 紫红/亮紫
+        r = 0.6 + Math.random() * 0.4;
+        g = 0.2 + Math.random() * 0.2;
+        b = 0.8 + Math.random() * 0.2;
+      } else {
+        // 边缘区域 - 深蓝/深紫
+        r = 0.2 + Math.random() * 0.2;
+        g = 0.3 + Math.random() * 0.3;
+        b = 0.7 + Math.random() * 0.3;
+      }
+      
+      // 增加亮度
+      const brightness = 0.5 + Math.random() * 0.5;
+      colors[i * 3] = r * brightness;
+      colors[i * 3 + 1] = g * brightness;
+      colors[i * 3 + 2] = b * brightness;
+      
+      // 大小分布：核心粒子较大，外围较小但有偶尔的大星
+      if (Math.random() < 0.05) {
+        sizes[i] = Math.random() * 6 + 2; // 亮星
+      } else {
+        sizes[i] = Math.random() * 2 + 0.5; // 普通尘埃
+      }
+    }
+    
+    return { positions, colors, sizes };
+  }, []);
+  
+  // 自定义星星着色器（十字形，支持近大远小）
+  const starMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {},
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          
+          // 使用视图空间的 Z 深度
+          vViewZDepth = -mvPosition.z;
+          
+          // 近大远小
+          float distanceScale = 1.0 / (1.0 + vViewZDepth * 0.0015);
+          gl_PointSize = size * distanceScale * (400.0 / vViewZDepth);
+          
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          
+          // 圆形粒子，超出半径丢弃
+          if (dist > 0.5) discard;
+          
+          // 柔和的圆形渐变
+          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+          alpha = pow(alpha, 1.5) * 0.6;
+          
+          // 远处的星星更暗一些
+          float distanceFade = 1.0 - smoothstep(400.0, 1300.0, vViewZDepth);
+          alpha *= (0.3 + distanceFade * 0.5);
+          
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+  }, []);
+  
+  // 快速旋转，营造流动感
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.08;
+    }
+  });
+  
+  if (state === 'FORMED') return null;
+  
+  return (
+    <group ref={groupRef}>
+      <points ref={particlesRef} material={starMaterial}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+          <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
+        </bufferGeometry>
+      </points>
+    </group>
+  );
+};
+
+// === SHADER 宇宙背景系统 (只在 CHAOS 状态显示) ===
+
+// GLSL 噪声函数
+const noiseGLSL = `
+// Simplex 3D Noise 
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+float snoise(vec3 v){ 
+  const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+  const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+  vec3 i  = floor(v + dot(v, C.yyy) );
+  vec3 x0 = v - i + dot(i, C.xxx) ;
+
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min( g.xyz, l.zxy );
+  vec3 i2 = max( g.xyz, l.zxy );
+
+  vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+  vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+  vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+  i = mod(i, 289.0 ); 
+  vec4 p = permute( permute( permute( 
+             i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+           + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+           + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+  float n_ = 1.0/7.0; 
+  vec3  ns = n_ * D.wyz - D.xzx;
+
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z); 
+
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_ );  
+
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+
+  vec4 b0 = vec4( x.xy, y.xy );
+  vec4 b1 = vec4( x.zw, y.zw );
+
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+  vec3 p0 = vec3(a0.xy,h.x);
+  vec3 p1 = vec3(a0.zw,h.y);
+  vec3 p2 = vec3(a1.xy,h.z);
+  vec3 p3 = vec3(a1.zw,h.w);
+
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+  p0 *= norm.x;
+  p1 *= norm.y;
+  p2 *= norm.z;
+  p3 *= norm.w;
+
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), 
+                                dot(p2,x2), dot(p3,x3) ) );
+}
+
+// Fractal Brownian Motion (FBM) for cloud-like details
+float fbm(vec3 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    for (int i = 0; i < 5; i++) {
+        value += amplitude * snoise(p * frequency);
+        frequency *= 2.0;
+        amplitude *= 0.5;
+    }
+    return value;
+}
+`;
+
+// 宇宙背景顶点着色器
+const cosmicBackgroundVertex = `
+varying vec2 vUv;
+varying vec3 vPosition;
+void main() {
+  vUv = uv;
+  vPosition = position;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+// 宇宙背景片段着色器 - 真实银河效果（密集星星版）
+const cosmicBackgroundFragment = `
+uniform float uTime;
+varying vec2 vUv;
+varying vec3 vPosition;
+
+${noiseGLSL}
+
+// 生成随机星星的hash函数
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float hash3(vec3 p) {
+  return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+
+// 生成星星场
+float starField(vec3 pos, float scale, float threshold) {
+  vec3 p = pos * scale;
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  
+  float star = 0.0;
+  
+  // 检查周围的格子
+  for(int x = -1; x <= 1; x++) {
+    for(int y = -1; y <= 1; y++) {
+      for(int z = -1; z <= 1; z++) {
+        vec3 cell = i + vec3(float(x), float(y), float(z));
+        vec3 cellPos = vec3(hash3(cell), hash3(cell + 100.0), hash3(cell + 200.0));
+        vec3 starPos = cell + cellPos;
+        
+        float d = length(p - starPos);
+        float brightness = hash3(cell + 300.0);
+        
+        if(brightness > threshold) {
+          float size = (brightness - threshold) / (1.0 - threshold);
+          size = size * 0.015 + 0.003;
+          float s = 1.0 - smoothstep(0.0, size, d);
+          s = pow(s, 2.0);
+          star = max(star, s * brightness);
+        }
+      }
+    }
+  }
+  
+  return star;
+}
+
+void main() {
+  vec3 pos = normalize(vPosition);
+  
+  // 非常缓慢的旋转
+  float angle = uTime * 0.001; 
+  mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+  pos.xz = rot * pos.xz;
+
+  // -- 银河带定义 - 斜着从左下到右上穿过画面中央 --
+  // 使用y轴为主，让银河水平穿过画面
+  vec3 bandNormal = normalize(vec3(0.35, 1.0, 0.15));
+  float lat = dot(pos, bandNormal);
+  
+  // 银河带mask - 宽度适中
+  float bandWidth = 0.4;
+  float bandMask = 1.0 - smoothstep(0.0, bandWidth, abs(lat));
+  bandMask = pow(bandMask, 0.8);
+  
+  // 银河核心更亮
+  float coreMask = 1.0 - smoothstep(0.0, 0.15, abs(lat));
+  coreMask = pow(coreMask, 1.5);
+  
+  // -- 背景：纯黑 + 稀疏星星 --
+  vec3 finalColor = vec3(0.0);
+  
+  // 背景稀疏星星（全天空）
+  float bgStars1 = starField(pos, 80.0, 0.97);
+  float bgStars2 = starField(pos, 120.0, 0.98);
+  float bgStars3 = starField(pos, 200.0, 0.985);
+  float bgStars = bgStars1 * 0.8 + bgStars2 * 0.6 + bgStars3 * 0.4;
+  finalColor += vec3(0.9, 0.92, 1.0) * bgStars * 0.5;
+  
+  // -- 银河区域：大量密集星星 --
+  
+  // 银河内的密集星星 - 多层叠加
+  float galaxyStars1 = starField(pos, 150.0, 0.85) * bandMask;
+  float galaxyStars2 = starField(pos, 250.0, 0.82) * bandMask;
+  float galaxyStars3 = starField(pos, 400.0, 0.80) * bandMask;
+  float galaxyStars4 = starField(pos, 600.0, 0.78) * bandMask;
+  
+  // 核心区域更密集
+  float coreStars1 = starField(pos, 300.0, 0.70) * coreMask;
+  float coreStars2 = starField(pos, 500.0, 0.65) * coreMask;
+  
+  float allGalaxyStars = galaxyStars1 * 0.9 + galaxyStars2 * 0.7 + galaxyStars3 * 0.5 + galaxyStars4 * 0.3;
+  allGalaxyStars += coreStars1 * 0.8 + coreStars2 * 0.5;
+  
+  // 星星颜色变化 - 蓝白为主，少量暖色
+  vec3 starColor1 = vec3(0.85, 0.88, 1.0);   // 蓝白色
+  vec3 starColor2 = vec3(0.95, 0.95, 1.0);   // 纯白
+  vec3 starColor3 = vec3(1.0, 0.92, 0.85);   // 微暖
+  
+  float colorMix = snoise(pos * 20.0) * 0.5 + 0.5;
+  vec3 galaxyStarColor = mix(starColor1, starColor2, colorMix);
+  float warmMix = pow(max(snoise(pos * 15.0 + 50.0), 0.0), 3.0);
+  galaxyStarColor = mix(galaxyStarColor, starColor3, warmMix * 0.3);
+  
+  finalColor += galaxyStarColor * allGalaxyStars * 0.9;
+  
+  // -- 银河的淡淡辉光（非常微弱，不要雾蒙蒙） --
+  float glowNoise = fbm(pos * 3.0) * 0.5 + 0.5;
+  float glow = bandMask * glowNoise * 0.08; // 非常微弱的辉光
+  vec3 glowColor = vec3(0.4, 0.45, 0.6);
+  finalColor += glowColor * glow;
+  
+  // 核心区域稍亮一点的辉光
+  float coreGlow = coreMask * 0.06;
+  finalColor += vec3(0.5, 0.52, 0.65) * coreGlow;
+  
+  // -- 暗尘带效果 --
+  float dustNoise = fbm(pos * 4.0 + vec3(100.0, 0.0, 0.0));
+  float dustLane = smoothstep(0.4, 0.7, dustNoise);
+  float dustZone = 1.0 - smoothstep(0.0, 0.1, abs(lat));
+  float dust = dustLane * dustZone * 0.3;
+  finalColor *= (1.0 - dust * 0.5); // 暗尘带让部分区域变暗
+  
+  // -- 一些特别亮的星星 --
+  float brightStars = starField(pos, 50.0, 0.995);
+  finalColor += vec3(1.0, 1.0, 1.0) * brightStars * 1.5;
+  
+  gl_FragColor = vec4(finalColor, 1.0);
+}
+`;
+
+// 星星顶点着色器
+const starVertexShader = `
+attribute float size;
+attribute float brightness;
+varying float vBrightness;
+
+void main() {
+  vBrightness = brightness;
+  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+  
+  // Size attenuation
+  gl_PointSize = size * (800.0 / -mvPosition.z);
+  gl_Position = projectionMatrix * mvPosition;
+}
+`;
+
+// 星星片段着色器
+const starFragmentShader = `
+varying float vBrightness;
+
+void main() {
+  // Soft circular particle
+  vec2 coord = gl_PointCoord - vec2(0.5);
+  float dist = length(coord);
+  
+  if (dist > 0.5) discard;
+  
+  // Soft glow core
+  float glow = 1.0 - (dist * 2.0);
+  glow = pow(glow, 2.0);
+  
+  vec3 starColor = vec3(0.95, 0.98, 1.0);
+  
+  gl_FragColor = vec4(starColor, glow * vBrightness);
+}
+`;
+
+// --- Component: Shader Star Field (着色器星空 - CHAOS状态) ---
+const ShaderStarField = ({ count = 12000 }: { count?: number }) => {
+  const meshRef = useRef<THREE.Points>(null);
+
+  const [positions, brightness, sizes] = useMemo(() => {
+    const positions = new Float32Array(count * 3);
+    const brightness = new Float32Array(count);
+    const sizes = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // 均匀球形分布
+      const r = 150 + Math.random() * 600; // 深度范围
+      const theta = 2 * Math.PI * Math.random();
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+
+      positions[i * 3] = x;
+      positions[i * 3 + 1] = y;
+      positions[i * 3 + 2] = z;
+
+      // 亮度
+      brightness[i] = Math.random() * 0.8 + 0.2;
+
+      // 大小：大部分小星星，少数亮星
+      const sizeRoll = Math.random();
+      if (sizeRoll > 0.99) sizes[i] = 3.0 + Math.random() * 2.0;
+      else if (sizeRoll > 0.95) sizes[i] = 2.0 + Math.random() * 1.5;
+      else sizes[i] = 0.5 + Math.random() * 1.5;
+    }
+
+    return [positions, brightness, sizes];
+  }, [count]);
+
+  useFrame((state) => {
+    // 非常缓慢的旋转
+    if (meshRef.current) {
+      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.003;
+    }
+  });
+
+  return (
+    <points ref={meshRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+        <bufferAttribute attach="attributes-brightness" count={count} array={brightness} itemSize={1} />
+        <bufferAttribute attach="attributes-size" count={count} array={sizes} itemSize={1} />
+      </bufferGeometry>
+      <shaderMaterial
+        vertexShader={starVertexShader}
+        fragmentShader={starFragmentShader}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+};
+
+// --- Component: Cosmic Background (宇宙银河背景球 - CHAOS状态) ---
+const CosmicBackground = () => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+
+  useFrame((state) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = state.clock.getElapsedTime();
+    }
+  });
+
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+  }), []);
+
+  return (
+    <group>
+      {/* 巨大的背景球体 */}
+      <mesh ref={meshRef} scale={[1500, 1500, 1500]} renderOrder={-1000}>
+        <sphereGeometry args={[1, 64, 64]} />
+        <shaderMaterial
+          ref={materialRef}
+          vertexShader={cosmicBackgroundVertex}
+          fragmentShader={cosmicBackgroundFragment}
+          uniforms={uniforms}
+          side={THREE.BackSide}
+          depthWrite={false}
+          depthTest={false}
+        />
+      </mesh>
+    </group>
+  );
+};
+
+// --- Component: Cosmic Dust (宇宙微尘 - 小圆点填充背景) ---
+const CosmicDust = () => {
+  const dustRef = useRef<THREE.Points>(null);
+  
+  const { positions, colors, sizes } = useMemo(() => {
+    const count = 15000; // 15000个微尘粒子
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    
+    for (let i = 0; i < count; i++) {
+      // 球形均匀分布
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 300 + Math.random() * 800; // 300-1100范围
+      
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.cos(phi);
+      positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      
+      // 紫色调微尘
+      const brightness = 0.3 + Math.random() * 0.4;
+      colors[i * 3] = brightness * 0.8;     // R - 紫色偏多
+      colors[i * 3 + 1] = brightness * 0.5; // G - 少绿
+      colors[i * 3 + 2] = brightness * 1.0; // B - 蓝紫色
+      
+      // 基础尺寸（会在着色器中根据距离调整）
+      sizes[i] = Math.random() * 1.2 + 0.3;
+    }
+    
+    return { positions, colors, sizes };
+  }, []);
+  
+  // 自定义材质，支持近大远小
+  const dustMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {},
+      vertexShader: `
+        attribute float size;
+        attribute vec3 color;
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          
+          // 使用视图空间的 Z 深度
+          vViewZDepth = -mvPosition.z;
+          
+          // 近大远小
+          float distanceScale = 1.0 / (1.0 + vViewZDepth * 0.003);
+          gl_PointSize = size * distanceScale * (250.0 / vViewZDepth);
+          
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vViewZDepth;
+        
+        void main() {
+          // 圆形粒子
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          
+          if (dist > 0.5) discard;
+          
+          // 柔和渐变
+          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+          alpha = pow(alpha, 1.5);
+          
+          // 远处更透明
+          float distanceFade = 1.0 - smoothstep(300.0, 1100.0, vViewZDepth);
+          alpha *= (0.2 + distanceFade * 0.4);
+          
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+  }, []);
+  
+  // 缓慢旋转
+  useFrame((_, delta) => {
+    if (dustRef.current) {
+      dustRef.current.rotation.y += delta * 0.02;
+      dustRef.current.rotation.x += delta * 0.01;
+    }
+  });
+  
+  return (
+    <points ref={dustRef} material={dustMaterial}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        <bufferAttribute attach="attributes-size" args={[sizes, 1]} />
+      </bufferGeometry>
+    </points>
+  );
+};
+
+// --- Component: Galaxy Trails (银河光流拖尾) ---
+const GalaxyTrails = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const linesRef = useRef<THREE.LineSegments>(null);
+
+  const { positions, colors } = useMemo(() => {
+    const count = 1000; // 减少数量
+    const positions = new Float32Array(count * 6); // 每个线条2个点，每个点3个坐标
+    const colors = new Float32Array(count * 6);
+    
+    const arms = 5;
+    const coreRadius = 150;
+
+    for (let i = 0; i < count; i++) {
+      const armIndex = i % arms;
+      const armAngle = (armIndex / arms) * Math.PI * 2;
+      
+      const distance = Math.pow(Math.random(), 1.2);
+      const radius = coreRadius + distance * 900;
+      const spiralAngle = distance * Math.PI * 4;
+      const angle = armAngle + spiralAngle + (Math.random() - 0.5) * 0.5;
+      
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      const y = (Math.random() - 0.5) * 60 * (1 - distance * 0.5);
+
+      // 拖尾长度 - 变得非常短，像光点
+      const tailLength = 2 + Math.random() * 4; // 很短的拖尾，2-6单位
+      
+      // 拖尾方向（切线方向）
+      const tangentAngle = angle + Math.PI / 2;
+      const tx = Math.cos(tangentAngle) * tailLength;
+      const tz = Math.sin(tangentAngle) * tailLength;
+
+      // 起点
+      positions[i * 6] = x;
+      positions[i * 6 + 1] = y;
+      positions[i * 6 + 2] = z;
+      
+      // 终点
+      positions[i * 6 + 3] = x - tx;
+      positions[i * 6 + 4] = y;
+      positions[i * 6 + 5] = z - tz;
+
+      // 颜色 - 亮白/青/紫
+      const brightness = 0.8 + Math.random() * 0.5; // 更亮
+      const colorType = Math.random();
+      
+      let r, g, b;
+      if (colorType > 0.7) {
+        // 青色光点
+        r = 0.4; g = 0.9; b = 1.0;
+      } else if (colorType > 0.4) {
+        // 紫色光点
+        r = 0.9; g = 0.6; b = 1.0;
+      } else {
+        // 白色光点
+        r = 1.0; g = 1.0; b = 1.0;
+      }
+
+      // 起点颜色（高亮）
+      colors[i * 6] = r * brightness;
+      colors[i * 6 + 1] = g * brightness;
+      colors[i * 6 + 2] = b * brightness;
+
+      // 终点颜色（快速衰减）
+      colors[i * 6 + 3] = r * 0.1;
+      colors[i * 6 + 4] = g * 0.1;
+      colors[i * 6 + 5] = b * 0.1;
+    }
+
+    return { positions, colors };
+  }, []);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.12;
+    }
+  });
+
+  if (state === 'FORMED') return null;
+
+  return (
+    <group ref={groupRef}>
+      <lineSegments ref={linesRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        </bufferGeometry>
+        <lineBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.6} // 提高不透明度，让光点更明显
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          linewidth={2} // 如果浏览器支持
+        />
+      </lineSegments>
     </group>
   );
 };
@@ -2231,29 +3797,32 @@ const createRealisticSciFiPlanetTexture = (
 
 // 写实风格星环 - 有光照反射
 const createSciFiRingTexture = (brightness: number) => {
-  const width = 512;
-  const height = 64;
+  const width = 1024; // 提高分辨率
+  const height = 128;
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d')!;
   
-  // 棕金/灰紫色调的环 - 更亮
+  // 深色半透明环，融入紫色宇宙氛围
   for (let x = 0; x < width; x++) {
-    // 模拟光照：左侧亮，右侧暗
-    const lightFactor = 1 - (x / width) * 0.4;
-    const baseLight = (70 + brightness * 50) * lightFactor;
+    // 模拟光照：左侧稍亮，右侧暗
+    const lightFactor = 1 - (x / width) * 0.3;
+    const baseLight = (40 + brightness * 30) * lightFactor;
     
     for (let y = 0; y < height; y++) {
       // 环的密度变化
       const distFromCenter = Math.abs(y - height / 2) / (height / 2);
-      const ringDensity = Math.sin(distFromCenter * Math.PI) * 0.8 + 0.2;
+      const ringDensity = Math.sin(distFromCenter * Math.PI) * 0.7 + 0.3;
       
-      const variation = (Math.random() - 0.5) * 20;
-      const r = Math.min(255, baseLight + variation + 50);
-      const g = Math.min(255, baseLight + variation + 35);
-      const b = Math.min(255, baseLight + variation + 20);
-      const alpha = ringDensity * (0.5 + Math.random() * 0.3);
+      // 添加噪声
+      const noise = (Math.random() - 0.5) * 15;
+      
+      // 深色调，带紫色
+      const r = Math.min(255, baseLight + noise + 30);
+      const g = Math.min(255, baseLight + noise + 20);
+      const b = Math.min(255, baseLight + noise + 40); // 偏紫
+      const alpha = ringDensity * (0.35 + Math.random() * 0.2);
       
       ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
       ctx.fillRect(x, y, 1, 1);
@@ -2267,6 +3836,7 @@ const createSciFiRingTexture = (brightness: number) => {
   
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
+  texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
 };
@@ -2293,7 +3863,7 @@ const OrbitingPlanet = ({
   const phaseRef = useRef(Math.random() * Math.PI * 2);
   
   const texture = useMemo(() => {
-    // 使用新的纹理生成方式，与 PlanetOrnaments 一致
+    // 使用新的纹理生成方式，颜色更协调
     const typeMap: Record<string, string> = {
       'earth_like': 'rocky',
       'gas_giant': 'gas',
@@ -2303,12 +3873,12 @@ const OrbitingPlanet = ({
       'volcanic': 'volcanic'
     };
     const colorMap: Record<string, string> = {
-      'earth_like': '#4080c0',
-      'gas_giant': '#d4a060',
-      'rocky': '#808080',
-      'ice': '#80a0c0',
-      'desert': '#c0a060',
-      'volcanic': '#ff3000'
+      'earth_like': '#3a6090',    // 深蓝色
+      'gas_giant': '#9a7a50',     // 深金棕色
+      'rocky': '#606060',         // 灰色
+      'ice': '#5a7a95',           // 深冰蓝
+      'desert': '#8a7050',        // 深沙色
+      'volcanic': '#1a0808'       // 深暗红（不再是鲜红）
     };
     return generateProceduralTexture(typeMap[planetType], colorMap[planetType]);
   }, [planetType]);
@@ -2317,15 +3887,15 @@ const OrbitingPlanet = ({
     return hasRing ? createSciFiRingTexture(0.6) : null;
   }, [hasRing]);
   
-  // 根据类型选择大气层颜色
+  // 根据类型选择大气层颜色（更深沉）
   const getRimColor = () => {
     switch (planetType) {
-      case 'earth_like': return '#4a8fcc';
-      case 'gas_giant': return '#c9a055';
-      case 'ice': return '#7090c0';
-      case 'desert': return '#b08050';
-      case 'volcanic': return '#a04030';
-      default: return '#6080a0';
+      case 'earth_like': return '#3a5a80';
+      case 'gas_giant': return '#8a6a40';
+      case 'ice': return '#5070a0';
+      case 'desert': return '#806040';
+      case 'volcanic': return '#3a1a20'; // 深紫红色，不再是鲜红
+      default: return '#5060a0';
     }
   };
   
@@ -2361,26 +3931,27 @@ const OrbitingPlanet = ({
   
   return (
     <group ref={groupRef} position={[basePosition.x, basePosition.y, basePosition.z]}>
-      {/* 星球主体 - 完全不透明固体 */}
+      {/* 星球主体 - 高质量材质 */}
       <mesh ref={planetRef}>
-        <sphereGeometry args={[planetSize, 64, 64]} />
+        <sphereGeometry args={[planetSize, 128, 128]} />
         <meshStandardMaterial
           map={texture}
-          roughness={planetType === 'gas_giant' ? 0.6 : planetType === 'ice' ? 0.4 : 0.5}
-          metalness={0.1}
-          emissive={planetType === 'volcanic' ? new THREE.Color('#ff3000') : new THREE.Color(rimColor).multiplyScalar(0.15)}
-          emissiveIntensity={planetType === 'volcanic' ? 0.4 : 0.1}
-          envMapIntensity={0.3}
+          roughness={planetType === 'gas_giant' ? 0.7 : planetType === 'ice' ? 0.3 : 0.8}
+          metalness={planetType === 'ice' ? 0.2 : 0.05}
+          emissive={planetType === 'volcanic' ? new THREE.Color('#2a0a0a') : new THREE.Color(rimColor).multiplyScalar(0.05)}
+          emissiveIntensity={planetType === 'volcanic' ? 0.15 : 0.05}
+          envMapIntensity={0.4}
+          side={THREE.FrontSide}
         />
       </mesh>
       
-      {/* 边缘大气光晕 - 非常轻微，淡蓝/淡紫色 */}
-      <mesh scale={[1.02, 1.02, 1.02]}>
+      {/* 边缘大气光晕 - 更柔和 */}
+      <mesh scale={[1.03, 1.03, 1.03]}>
         <sphereGeometry args={[planetSize, 32, 32]} />
         <meshBasicMaterial
           color={rimColor}
           transparent
-          opacity={0.06}
+          opacity={0.08}
           side={THREE.BackSide}
           blending={THREE.AdditiveBlending}
         />
@@ -2559,6 +4130,155 @@ const BoltFill = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
+// --- Component: Disperse Particles (散开时的宇宙粒子爆炸效果) ---
+const DisperseParticles = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const pointsRef = useRef<THREE.Points>(null);
+  const progressRef = useRef(0);
+  const count = CONFIG.counts.disperseParticles;
+  
+  // 生成粒子数据 - 从闪电形状散开到宇宙各处
+  const { startPositions, endPositions, colors, sizes, speeds } = useMemo(() => {
+    const startPositions = new Float32Array(count * 3);
+    const endPositions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const speeds = new Float32Array(count);
+    
+    for (let i = 0; i < count; i++) {
+      // 起始位置 - 闪电形状内部
+      const [lx, ly, lz] = getLightningPosition();
+      startPositions[i * 3] = lx + (Math.random() - 0.5) * 10;
+      startPositions[i * 3 + 1] = ly + (Math.random() - 0.5) * 10;
+      startPositions[i * 3 + 2] = lz + (Math.random() - 0.5) * 10;
+      
+      // 终点位置 - 球形均匀分布到宇宙各处
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 80 + Math.random() * 400; // 80-480范围
+      
+      endPositions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      endPositions[i * 3 + 1] = radius * Math.cos(phi);
+      endPositions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+      
+      // 颜色 - 蓝紫白色调，明亮
+      const colorChoice = Math.random();
+      if (colorChoice < 0.35) {
+        // 白色/淡蓝
+        colors[i * 3] = 0.85 + Math.random() * 0.15;
+        colors[i * 3 + 1] = 0.88 + Math.random() * 0.12;
+        colors[i * 3 + 2] = 1.0;
+      } else if (colorChoice < 0.6) {
+        // 青色
+        colors[i * 3] = 0.4 + Math.random() * 0.3;
+        colors[i * 3 + 1] = 0.8 + Math.random() * 0.2;
+        colors[i * 3 + 2] = 1.0;
+      } else if (colorChoice < 0.85) {
+        // 紫色
+        colors[i * 3] = 0.6 + Math.random() * 0.3;
+        colors[i * 3 + 1] = 0.4 + Math.random() * 0.2;
+        colors[i * 3 + 2] = 0.9 + Math.random() * 0.1;
+      } else {
+        // 金色点缀
+        colors[i * 3] = 1.0;
+        colors[i * 3 + 1] = 0.85 + Math.random() * 0.15;
+        colors[i * 3 + 2] = 0.4 + Math.random() * 0.3;
+      }
+      
+      // 大小
+      const distFactor = radius / 480;
+      sizes[i] = (1.5 - distFactor * 0.6) * (0.7 + Math.random() * 0.5);
+      
+      // 速度 - 随机化让动画更自然
+      speeds[i] = 0.5 + Math.random() * 1.0;
+    }
+    
+    return { startPositions, endPositions, colors, sizes, speeds };
+  }, [count]);
+  
+  useFrame((_, delta) => {
+    if (!pointsRef.current) return;
+    
+    const geometry = pointsRef.current.geometry;
+    const positions = geometry.attributes.position.array as Float32Array;
+    
+    // 目标进度
+    const targetProgress = state === 'CHAOS' ? 1 : 0;
+    
+    // 平滑过渡
+    progressRef.current = MathUtils.lerp(progressRef.current, targetProgress, delta * 2.5);
+    
+    // 更新每个粒子位置
+    for (let i = 0; i < count; i++) {
+      const speed = speeds[i];
+      const p = Math.min(1, Math.max(0, progressRef.current * speed));
+      
+      // 使用easeOutQuart让散开更有爆发感
+      const eased = 1 - Math.pow(1 - p, 4);
+      
+      positions[i * 3] = MathUtils.lerp(startPositions[i * 3], endPositions[i * 3], eased);
+      positions[i * 3 + 1] = MathUtils.lerp(startPositions[i * 3 + 1], endPositions[i * 3 + 1], eased);
+      positions[i * 3 + 2] = MathUtils.lerp(startPositions[i * 3 + 2], endPositions[i * 3 + 2], eased);
+    }
+    
+    geometry.attributes.position.needsUpdate = true;
+    
+    // 透明度随进度变化
+    const material = pointsRef.current.material as THREE.ShaderMaterial;
+    material.uniforms.uOpacity.value = progressRef.current * 0.85;
+  });
+  
+  // 初始位置数组 - 用于渲染
+  const positionsArray = useMemo(() => new Float32Array(startPositions), [startPositions]);
+  
+  // 自定义圆形粒子材质
+  const disperseMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: 0 }
+      },
+      vertexShader: `
+        attribute vec3 color;
+        varying vec3 vColor;
+        
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = 5.0 * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec3 vColor;
+        
+        void main() {
+          vec2 center = gl_PointCoord - 0.5;
+          float dist = length(center);
+          
+          if (dist > 0.5) discard;
+          
+          float alpha = 1.0 - smoothstep(0.0, 0.5, dist);
+          alpha = pow(alpha, 1.2) * uOpacity;
+          
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+  }, []);
+  
+  return (
+    <points ref={pointsRef} material={disperseMaterial}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positionsArray} itemSize={3} />
+        <bufferAttribute attach="attributes-color" count={count} array={colors} itemSize={3} />
+      </bufferGeometry>
+    </points>
+  );
+};
+
 // --- Component: Top Star (次元核心光球) ---
 const TopStar = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -2716,13 +4436,45 @@ const Experience = ({
         maxPolarAngle={Math.PI / 1.7}
       />
 
-      <color attach="background" args={['#020210']} />
-      <Stars radius={400} depth={200} count={20000} factor={10} saturation={0.3} fade speed={0.5} />
-      <Stars radius={600} depth={300} count={8000} factor={6} saturation={0.5} fade speed={0.3} />
+      <color attach="background" args={['#000000']} />
+      
+      {/* Shader 宇宙银河背景 - 暂时禁用，性能问题 */}
+      {/* {sceneState === 'CHAOS' && <CosmicBackground />} */}
+      
+      {/* Shader 星空 - 只在CHAOS状态显示 */}
+      {sceneState === 'CHAOS' && <ShaderStarField count={10000} />}
+      
+      {/* 雾效 - CHAOS状态下减弱，避免遮挡银河 */}
+      <fog attach="fog" args={[sceneState === 'CHAOS' ? '#000005' : '#0a0520', sceneState === 'CHAOS' ? 800 : 400, sceneState === 'CHAOS' ? 2000 : 1500]} />
+      
+      {/* 静态星空背景 - 减少数量避免性能问题 */}
+      <Stars radius={400} depth={200} count={sceneState === 'CHAOS' ? 5000 : 8000} factor={8} saturation={0.4} fade speed={0.15} />
+      <Stars radius={700} depth={350} count={sceneState === 'CHAOS' ? 3000 : 5000} factor={10} saturation={0.35} fade speed={0.1} />
+      <Stars radius={1000} depth={450} count={sceneState === 'CHAOS' ? 2000 : 3000} factor={12} saturation={0.3} fade speed={0.08} />
+      
+      {/* 远景微弱星星 - 只在CHAOS状态显示，减少数量 */}
+      {sceneState === 'CHAOS' && (
+        <>
+          <Stars radius={1300} depth={600} count={2000} factor={15} saturation={0.2} fade speed={0.05} />
+        </>
+      )}
+      
+      {/* 流动星空 - 动态层，只在FORMED状态显示 */}
+      {sceneState === 'FORMED' && <FlowingStars />}
+      
+      {/* 宇宙微尘 - 两种状态都显示，增加星空感 */}
+      <CosmicDust />
+      
+      {/* 散开时的宇宙粒子爆炸效果 */}
+      <DisperseParticles state={sceneState} />
+      
       <Environment preset="night" background={false} />
       
-      {/* 星云背景层 - 只在FORMED状态显示，避免CHAOS时方形漂浮 */}
-      {sceneState === 'FORMED' && <NebulaBackground />}
+      {/* 银河背景 - 流动星尘，只在散开态显示 */}
+      <MilkyWayGalaxy state={sceneState} />
+      
+      {/* 星云背景层 - 禁用，会出现方块 */}
+      {/* {sceneState === 'FORMED' && <NebulaBackground />} */}
       
       {/* 流星效果 - 只在散开态显示 */}
       <ShootingStars state={sceneState} />
@@ -2730,17 +4482,44 @@ const Experience = ({
       {/* 动态环绕星球 - 只在散开态显示 */}
       <DynamicOrbitingPlanets state={sceneState} />
 
-      {/* 深空感光照系统 - 低环境光 + 强点光源 */}
-      <ambientLight intensity={sceneState === 'CHAOS' ? 0.15 : 0.8} color="#404050" />
-      {/* 半球光 - 模拟太空中的微弱散射 */}
-      <hemisphereLight intensity={sceneState === 'CHAOS' ? 0.2 : 0.4} color="#8080ff" groundColor="#000000" />
-      {/* 主太阳光 - 左上方，模拟真实太阳照射 */}
-      <directionalLight position={[-150, 100, 100]} intensity={sceneState === 'CHAOS' ? 1.8 : 2.5} color="#fff4e0" />
-      {/* 补光 - 右侧柔和光源 */}
-      <directionalLight position={[100, 50, 80]} intensity={0.6} color="#E8F0FF" />
+      {/* 深空感光照系统 - 增强紫色氛围 */}
+      <ambientLight intensity={sceneState === 'CHAOS' ? 0.3 : 0.8} color="#604070" />
+      
+      {/* 半球光 - 模拟太空中的紫色散射 */}
+      <hemisphereLight 
+        intensity={sceneState === 'CHAOS' ? 0.4 : 0.5} 
+        color="#8070b0" 
+        groundColor="#301040" 
+      />
+      
+      {/* 主光源 - 左上方，带有淡紫色调 */}
+      <directionalLight 
+        position={[-150, 100, 100]} 
+        intensity={sceneState === 'CHAOS' ? 2.0 : 2.3} 
+        color="#f0e8ff" 
+      />
+      
+      {/* 紫色背光 - 右侧，营造深邃感 */}
+      <directionalLight 
+        position={[100, 50, 80]} 
+        intensity={1.2} 
+        color="#c0a0ff" 
+      />
+      
+      {/* 紫色侧光 - 增强氛围 */}
+      <directionalLight 
+        position={[0, -100, -200]} 
+        intensity={0.8} 
+        color="#6040a0" 
+      />
+      
       {/* 中心恒星光 - 只在CHAOS状态显示，增强深空感 */}
       {sceneState === 'CHAOS' && (
-        <pointLight position={[0, 0, 0]} intensity={800} color="#ffffff" distance={4000} decay={1.5} />
+        <>
+          <pointLight position={[0, 0, 0]} intensity={1200} color="#ffffff" distance={4500} decay={1.5} />
+          {/* 紫色环境光晕 */}
+          <pointLight position={[0, 0, 0]} intensity={800} color="#8060ff" distance={2000} decay={2} />
+        </>
       )}
       {/* 原有点光源 - 只在FORMED状态显示 */}
       {sceneState === 'FORMED' && (

@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Particle Universe</title>
+  <style>
+    html, body { height: 100%; margin: 0; background:#000; overflow:hidden; }
+    #universe {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      display: block;
+      /* 让它像“深邃太空”而不是花哨霓虹 */
+      background: radial-gradient(1200px 800px at 60% 40%, rgba(40,70,120,.22), transparent 60%),
+                  radial-gradient(900px 600px at 30% 70%, rgba(120,60,140,.18), transparent 62%),
+                  radial-gradient(1000px 700px at 20% 20%, rgba(70,120,140,.14), transparent 60%),
+                  #02030a;
+    }
+    /* 如果你要放在页面内容下面 */
+    .content {
+      position: relative;
+      z-index: 1;
+      color: rgba(255,255,255,.85);
+      font-family: ui-sans-serif, system-ui;
+      padding: 32px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="universe"></canvas>
+  <!-- <div class="content">你的页面内容</div> -->
+
+<script>
+(() => {
+  const canvas = document.getElementById('universe');
+  const ctx = canvas.getContext('2d', { alpha: true });
+
+  // ======= 可调参数（你想更“密/深/慢”就改这里） =======
+  const CFG = {
+    // 星点数量会按面积自适应，这里是密度系数
+    starDensity: 0.00014,     // 约等于每像素多少颗星（越大越密）
+    layers: 4,                // 视差层数：越多越有深度
+    twinkle: 0.35,            // 闪烁强度 0~1
+    drift: 0.12,              // 漂移速度（整体慢慢流动）
+    fogStrength: 0.35,        // 星云雾化强度 0~1
+    vignette: 0.55,           // 暗角 0~1
+    meteorChance: 0.006       // 流星出现概率（每秒左右的概率级别）
+  };
+
+  // DPR 适配
+  let W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = Math.floor(window.innerWidth);
+    H = Math.floor(window.innerHeight);
+    canvas.width  = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    build();
+  }
+  window.addEventListener('resize', resize, { passive: true });
+
+  // ======= 工具：随机、噪声（轻量 hash noise） =======
+  const rand = (a=1, b=0) => Math.random() * (a - b) + b;
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  function hash2(x, y) {
+    // 轻量 2D hash noise（非贴图，纯计算）
+    let n = x * 374761393 + y * 668265263;
+    n = (n ^ (n >> 13)) * 1274126177;
+    return ((n ^ (n >> 16)) >>> 0) / 4294967295;
+  }
+  function smoothNoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf);
+    const v = yf * yf * (3 - 2 * yf);
+    const n00 = hash2(xi, yi);
+    const n10 = hash2(xi + 1, yi);
+    const n01 = hash2(xi, yi + 1);
+    const n11 = hash2(xi + 1, yi + 1);
+    const nx0 = n00 * (1 - u) + n10 * u;
+    const nx1 = n01 * (1 - u) + n11 * u;
+    return nx0 * (1 - v) + nx1 * v;
+  }
+  function fbm(x, y) {
+    // 分形布朗运动：叠几层噪声做“星云雾”
+    let value = 0, amp = 0.55, freq = 0.008;
+    for (let i = 0; i < 5; i++) {
+      value += amp * smoothNoise(x * freq, y * freq);
+      freq *= 2.0;
+      amp *= 0.55;
+    }
+    return value;
+  }
+
+  // ======= 星点与层 =======
+  let stars = [];
+  let fog = null;
+  let t0 = performance.now();
+  let driftX = 0, driftY = 0;
+
+  function build() {
+    // 根据面积生成星星
+    const area = W * H;
+    const totalStars = Math.floor(area * CFG.starDensity);
+    stars = [];
+
+    for (let layer = 0; layer < CFG.layers; layer++) {
+      const parallax = (layer + 1) / CFG.layers; // 0~1
+      const count = Math.floor(totalStars * (0.25 + parallax * 0.75) / CFG.layers);
+
+      for (let i = 0; i < count; i++) {
+        const x = Math.random() * W;
+        const y = Math.random() * H;
+
+        // 星等：多数很暗，少数更亮
+        const r = Math.pow(Math.random(), 2.6);
+        const size = 0.5 + (1.8 * (1 - r)) * (0.35 + parallax);
+
+        // 色温：偏冷的深空（轻微紫/蓝/白）
+        const hueRoll = Math.random();
+        let color;
+        if (hueRoll < 0.70) color = [220, 235, 255];        // 冷白
+        else if (hueRoll < 0.88) color = [195, 210, 255];   // 蓝
+        else color = [235, 210, 255];                       // 淡紫
+
+        const baseA = 0.18 + (1 - r) * 0.85; // 亮度
+        const twSeed = Math.random() * 1000;
+
+        stars.push({
+          x, y, layer, parallax,
+          size,
+          color,
+          baseA,
+          twSeed,
+          // 每颗星微小速度差，增强“空间流动”
+          vx: (Math.random() - 0.5) * 0.02 * parallax,
+          vy: (Math.random() - 0.5) * 0.02 * parallax
+        });
+      }
+    }
+
+    // 预烘焙星云雾层（离屏 canvas）——纯程序噪声，不是贴图
+    fog = document.createElement('canvas');
+    fog.width = Math.floor(W / 2);
+    fog.height = Math.floor(H / 2);
+    const fctx = fog.getContext('2d');
+    const img = fctx.createImageData(fog.width, fog.height);
+
+    for (let y = 0; y < fog.height; y++) {
+      for (let x = 0; x < fog.width; x++) {
+        const nx = (x / fog.width) * W;
+        const ny = (y / fog.height) * H;
+        const n = fbm(nx, ny); // 0~1-ish
+        const m = Math.pow(clamp(n, 0, 1), 2.2);
+
+        // 星云颜色（淡蓝紫）
+        const r = 20 + m * 90;
+        const g = 35 + m * 70;
+        const b = 60 + m * 140;
+        const a = m * 180 * CFG.fogStrength;
+
+        const idx = (y * fog.width + x) * 4;
+        img.data[idx + 0] = r;
+        img.data[idx + 1] = g;
+        img.data[idx + 2] = b;
+        img.data[idx + 3] = a;
+      }
+    }
+    fctx.putImageData(img, 0, 0);
+  }
+
+  // ======= 流星 =======
+  const meteors = [];
+  function maybeSpawnMeteor(dt) {
+    // 概率与 dt 相关（帧率无关）
+    const p = CFG.meteorChance * (dt / 1000);
+    if (Math.random() < p) {
+      const fromLeft = Math.random() < 0.5;
+      const x = fromLeft ? -50 : W + 50;
+      const y = rand(H * 0.15, H * 0.65);
+      const speed = rand(900, 1400);
+      const angle = fromLeft ? rand(0.25, 0.55) : rand(Math.PI - 0.55, Math.PI - 0.25);
+      meteors.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: rand(0.45, 0.9),
+        len: rand(180, 320)
+      });
+    }
+  }
+
+  function drawVignette() {
+    const g = ctx.createRadialGradient(W*0.5, H*0.5, Math.min(W,H)*0.1, W*0.5, H*0.5, Math.max(W,H)*0.75);
+    g.addColorStop(0.0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.75,'rgba(0,0,0,0)');
+    g.addColorStop(1.0, `rgba(0,0,0,${CFG.vignette})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function tick(now) {
+    const dt = now - t0;
+    t0 = now;
+
+    // 背景清理（保留 CSS 背景作为底色）
+    ctx.clearRect(0, 0, W, H);
+
+    // 漂移（整体偏移，制造“深空缓慢流动”）
+    driftX += CFG.drift * dt * 0.01;
+    driftY += CFG.drift * dt * 0.006;
+
+    // 先画星云雾（离屏放大回主画布）
+    if (fog) {
+      const fx = (driftX * 0.08) % (fog.width);
+      const fy = (driftY * 0.06) % (fog.height);
+      ctx.globalCompositeOperation = 'screen';
+      ctx.globalAlpha = 0.9;
+      // 平铺两次避免边缘缝
+      for (let ox of [-1, 0, 1]) {
+        for (let oy of [-1, 0, 1]) {
+          ctx.drawImage(
+            fog,
+            -fx + ox * fog.width,
+            -fy + oy * fog.height,
+            W + fog.width,
+            H + fog.height
+          );
+        }
+      }
+      ctx.globalAlpha = 1.0;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // 星点（多层视差 + 闪烁）
+    for (const s of stars) {
+      // 更新位置
+      s.x += (s.vx + 0.02 * s.parallax) * (dt);
+      s.y += (s.vy + 0.008 * s.parallax) * (dt);
+
+      // 视差循环
+      if (s.x < -20) s.x = W + 20;
+      if (s.x > W + 20) s.x = -20;
+      if (s.y < -20) s.y = H + 20;
+      if (s.y > H + 20) s.y = -20;
+
+      // 闪烁：轻微正弦 + 随机扰动
+      const tw = (Math.sin((now * 0.0012) + s.twSeed) * 0.5 + 0.5);
+      const alpha = clamp(s.baseA * (0.65 + CFG.twinkle * tw), 0, 1);
+
+      // 星点光晕（小径向渐变，避免像“像素点贴图”）
+      const [r,g,b] = s.color;
+      const radius = s.size * (0.7 + 0.7 * s.parallax);
+
+      const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, radius * 3.2);
+      grad.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+      grad.addColorStop(0.35, `rgba(${r},${g},${b},${alpha * 0.35})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, radius * 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 流星
+    maybeSpawnMeteor(dt);
+    ctx.globalCompositeOperation = 'screen';
+    for (let i = meteors.length - 1; i >= 0; i--) {
+      const m = meteors[i];
+      m.life += dt / 1000;
+      m.x += m.vx * (dt / 1000);
+      m.y += m.vy * (dt / 1000);
+
+      const k = 1 - (m.life / m.maxLife);
+      const a = clamp(k, 0, 1);
+
+      const tx = m.x - (m.vx / Math.hypot(m.vx, m.vy)) * m.len;
+      const ty = m.y - (m.vy / Math.hypot(m.vx, m.vy)) * m.len;
+
+      const g = ctx.createLinearGradient(tx, ty, m.x, m.y);
+      g.addColorStop(0, `rgba(180,210,255,0)`);
+      g.addColorStop(0.4, `rgba(210,230,255,${0.22 * a})`);
+      g.addColorStop(1, `rgba(255,255,255,${0.8 * a})`);
+
+      ctx.strokeStyle = g;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(m.x, m.y);
+      ctx.stroke();
+
+      if (m.life > m.maxLife) meteors.splice(i, 1);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 暗角收束
+    drawVignette();
+
+    requestAnimationFrame(tick);
+  }
+
+  resize();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

@@ -36,24 +36,56 @@ const generateBoltPoints = () => {
   return allPoints;
 };
 
-// Generate random 3D positions for the "Polaroid" state
+// Generate random 3D positions for the "Polaroid" state - Starfield warp effect
 const generateScatterState = (count: number) => {
-  return Array.from({ length: count }).map(() => ({
-    // Wide spread to fill the sky
-    x: (Math.random() - 0.5) * 2400, 
-    y: (Math.random() - 0.5) * 1400, 
-    z: (Math.random() - 0.5) * 2000 - 400, // Depth
-    // Initial random rotation for the dispersed state
-    rotateX: (Math.random() - 0.5) * 60,
-    rotateY: (Math.random() - 0.5) * 60,
-    rotateZ: (Math.random() - 0.5) * 30,
-    scale: 0.6 + Math.random() * 0.8,
-    // Content type
-    contentType: Math.floor(Math.random() * 4),
-    // Speed for the slow auto-rotation
-    rotationDuration: 15 + Math.random() * 20,
-    rotationDir: Math.random() > 0.5 ? 1 : -1
-  }));
+  // Particle colors - varied palette
+  const colors = [
+    '#D6A85A', // Gold
+    '#FFFFFF', // White
+    '#A0C4FF', // Light blue
+    '#FFD6E0', // Pink
+    '#C9B1FF', // Purple
+    '#BAFFC9', // Mint
+    '#FFE5B4', // Peach
+  ];
+  
+  return Array.from({ length: count }).map(() => {
+    // Distribute particles across the entire screen, avoiding center
+    const angle = Math.random() * Math.PI * 2;
+    // Minimum distance from center to avoid clustering
+    const minDistance = 200;
+    const maxDistance = 600;
+    const distance = minDistance + Math.random() * (maxDistance - minDistance);
+    
+    // Position spread across screen
+    const x = Math.cos(angle) * distance;
+    const y = Math.sin(angle) * distance * 0.7; // Slightly flattened for screen aspect
+    
+    // Only 0.5% of particles have glow effect (very rare)
+    const hasGlow = Math.random() < 0.005;
+    
+    // Random color for each particle
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    
+    // Random drift direction (small movement, not toward center)
+    const driftAngle = Math.random() * Math.PI * 2;
+    const driftDistance = 30 + Math.random() * 50;
+    const driftX = Math.cos(driftAngle) * driftDistance;
+    const driftY = Math.sin(driftAngle) * driftDistance;
+    
+    return {
+      x,
+      y,
+      driftX,
+      driftY,
+      hasGlow,
+      color,
+      contentType: Math.floor(Math.random() * 4),
+      // Slow drift animation
+      duration: 8 + Math.random() * 12,
+      delay: Math.random() * 5,
+    };
+  });
 };
 
 const generateStars = (count: number) => {
@@ -159,10 +191,11 @@ const App: React.FC = () => {
       <StarField />
       
       {/* Main Container for 3D Elements */}
-      <div className="relative w-[300px] h-[450px] transform-style-3d z-10">
+      <div className="fixed inset-0 z-10 flex items-center justify-center">
         
-        {/* We removed the SVG Line. Now the shape is defined purely by the particles below. */}
-
+        {/* Reference point for bolt shape - centered */}
+        <div className="relative w-[300px] h-[450px]">
+        
         {/* The Particles */}
         {boltPoints.map((point, index) => {
           const scatter = scatterStates[index];
@@ -170,71 +203,61 @@ const App: React.FC = () => {
           return (
             <motion.div
               key={index}
-              className="absolute top-0 left-0 will-change-transform"
+              className="absolute will-change-transform"
               initial={false}
-              // OUTER MOTION: Handles the big transition from Bolt Position to Sky Position
               animate={{
-                // Converged: Use scaled SVG points. Dispersed: Use random scatter points.
-                x: isDispersed ? scatter.x : (point.x * 3), 
+                // When gathered: bolt shape. When dispersed: scattered position
+                x: isDispersed ? scatter.x : (point.x * 3),
                 y: isDispersed ? scatter.y : (point.y * 3),
-                z: isDispersed ? scatter.z : 0,
-                // Rotation here sets the "initial" angle of the polaroid in the sky
-                rotateX: isDispersed ? scatter.rotateX : 0,
-                rotateY: isDispersed ? scatter.rotateY : 0,
-                rotateZ: isDispersed ? scatter.rotateZ : 0,
-                scale: isDispersed ? scatter.scale : 1,
-                // Size transition: Small dot -> Big card
-                width: isDispersed ? 80 : 8, 
-                height: isDispersed ? 100 : 8,
+                width: isDispersed ? 60 : 8, 
+                height: isDispersed ? 75 : 8,
               }}
               transition={{
-                duration: 1.5,
-                type: "spring",
-                stiffness: 40,
-                damping: 15,
-                delay: isDispersed ? Math.random() * 0.2 : Math.random() * 0.1
+                duration: 1.2,
+                ease: "easeOut",
+                delay: isDispersed ? index * 0.01 : index * 0.005
               }}
               style={{
-                // Center the pivot
-                marginLeft: isDispersed ? -40 : -4,
-                marginTop: isDispersed ? -50 : -4,
-                transformStyle: 'preserve-3d',
+                marginLeft: isDispersed ? -30 : -4,
+                marginTop: isDispersed ? -37 : -4,
               }}
             >
-              {/* INNER MOTION: Handles the continuous slow rotation when suspended */}
+              {/* Gentle drift animation - forward movement only */}
               <motion.div
-                 className="w-full h-full relative"
+                 className="w-full h-full"
                  animate={{
-                    // Infinite slow spin when dispersed. Static when gathered.
-                    rotateY: isDispersed ? [0, 360 * scatter.rotationDir] : 0,
-                    rotateX: isDispersed ? [0, 5, 0, -5, 0] : 0, 
+                    // Forward movement in one direction
+                    x: isDispersed ? [0, scatter.driftX] : 0,
+                    y: isDispersed ? [0, scatter.driftY] : 0,
                  }}
                  transition={{
-                    duration: scatter.rotationDuration,
+                    duration: scatter.duration,
                     repeat: Infinity,
+                    repeatType: "loop",
                     ease: "linear",
-                    // Use a delay so they don't all start spinning exactly at the same millisecond of the animation curve
-                    delay: Math.random() * 5 
+                    delay: scatter.delay,
                  }}
-                 style={{ transformStyle: 'preserve-3d' }}
               >
                 
-                {/* STATE A: Gold Dot (Visible when gathered) */}
+                {/* STATE A: Colored Dot (Visible when gathered) */}
                 <motion.div 
-                  className="absolute inset-0 rounded-full bg-[#D6A85A]"
+                  className="absolute inset-0 rounded-full"
                   animate={{ 
                     opacity: isDispersed ? 0 : 1,
-                    scale: isDispersed ? 0.2 : 1 // Shrink slightly as it fades
+                    scale: isDispersed ? 0.2 : 1
                   }}
                   transition={{ duration: 0.4 }}
                   style={{
-                    boxShadow: '0 0 8px rgba(214, 168, 90, 0.8), 0 0 4px rgba(214, 168, 90, 0.4)'
+                    backgroundColor: scatter.color,
+                    boxShadow: scatter.hasGlow 
+                      ? `0 0 8px ${scatter.color}aa, 0 0 4px ${scatter.color}66` 
+                      : 'none'
                   }}
                 />
 
                 {/* STATE B: Polaroid (Visible when dispersed) */}
                 <motion.div
-                  className="absolute inset-0 bg-white p-2 shadow-2xl flex flex-col"
+                  className="absolute inset-0 bg-white p-2 flex flex-col"
                   initial={{ opacity: 0 }}
                   animate={{ 
                     opacity: isDispersed ? 1 : 0,
@@ -243,7 +266,10 @@ const App: React.FC = () => {
                   style={{
                     backfaceVisibility: 'visible', 
                     borderRadius: '2px',
-                    boxShadow: '0 20px 40px -5px rgba(0,0,0,0.8)'
+                    // Only 1% of polaroids have glow effect
+                    boxShadow: scatter.hasGlow 
+                      ? `0 0 20px rgba(214,168,90,0.6), 0 0 40px rgba(214,168,90,0.3)` 
+                      : '0 4px 8px rgba(0,0,0,0.3)'
                   }}
                 >
                   <div className="flex-1 bg-neutral-900 w-full overflow-hidden relative border border-neutral-200/10">
@@ -259,6 +285,7 @@ const App: React.FC = () => {
           );
         })}
 
+        </div>
       </div>
 
       {/* Interactive Title Overlay */}
