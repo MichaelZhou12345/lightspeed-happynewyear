@@ -75,7 +75,7 @@ const CONFIG = {
   },
   counts: {
     foliage: 18000,           // 增加粒子密度
-    ornamentsChaos: 150,       // 散开态星球数量 - 增加到150
+    ornamentsChaos: 200,       // 散开态星球数量 - 增加到200
     ornamentsFormed: 12,      // 聚合态星球数量（闪电肚子里的精致宇宙）
     elementsChaos: 0,         // 散开态装饰 - 关闭避免漂浮方块
     elementsFormed: 0,
@@ -83,7 +83,7 @@ const CONFIG = {
     lightsFormed: 0,
     glowDots: 400,            // 减少发光点
     fillDots: 4000,           // 减少星尘填充
-    innerPlanets: 35,         // 闪电内部精致星球
+    innerPlanets: 50,         // 闪电内部精致星球 - 增加到50
     nebulaParticles: 1500,    // 减少星云粒子
     disperseParticles: 8000,  // 散开时的宇宙粒子数量
   },
@@ -1457,16 +1457,18 @@ const CINEMATIC_PLANET_PRESETS = [
   { hue: 40, type: 'desert' as const, name: '干旱行星' },
 ];
 
-// 真实星球纹理路径（不包含地球）- 多放土星和天王星
+// 真实星球纹理路径（不包含地球）- 增加更多种类
 const PLANET_TEXTURE_PATHS = [
   '/textures/saturnTexture.jpeg',    // 0 - 土星（带环用）
   '/textures/jupiterTexture.jpeg',   // 1 - 木星
   '/textures/uranusTexture.jpeg',    // 2 - 天王星
-  '/textures/jupiterTexture.jpeg',   // 3 - 木星
-  '/textures/uranusTexture.jpeg',    // 4 - 天王星
+  '/textures/venusTexture.jpeg',     // 3 - 金星
+  '/textures/marsTexture.jpeg',      // 4 - 火星
   '/textures/jupiterTexture.jpeg',   // 5 - 木星
   '/textures/uranusTexture.jpeg',    // 6 - 天王星
-  '/textures/marsTexture.jpeg',      // 7 - 火星
+  '/textures/mercuryTexture.jpeg',   // 7 - 水星
+  '/textures/plutoTexture.jpeg',     // 8 - 冥王星
+  '/textures/saturnTexture.jpeg',    // 9 - 土星
 ];
 
 const PlanetOrnaments = ({
@@ -1665,10 +1667,11 @@ const PlanetOrnaments = ({
       const textureIndex = hasRing ? 0 : (i % PLANET_TEXTURE_PATHS.length);
       
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
-      // 星环倾斜角度 - 像真实土星那样，微微倾斜，不要太夸张
-      // X轴倾斜约15-30度，让星环看起来像图片中那样优雅
+      // 星环倾斜角度 - 只在X轴上倾斜，保持纹理水平
+      // X轴倾斜约15-30度，让星环看起来像真实土星那样优雅
       const ringTilt = Math.PI / 8 + Math.random() * Math.PI / 12; // 22.5° 到 37.5° X轴倾斜
-      const ringYaw = Math.random() * Math.PI * 2;  // Y轴随机旋转，但因为倾斜角度小，不会正对摄像机
+      // Y轴只做小范围旋转，避免纹理变竖
+      const ringYaw = (Math.random() - 0.5) * Math.PI / 3;  // -30° 到 30° Y轴旋转
       
       // 行星轴倾斜 - 保持纹理基本水平，只有轻微倾斜
       const axisTilt = (Math.random() - 0.5) * 0.1;
@@ -1738,11 +1741,13 @@ const PlanetOrnaments = ({
       const newScale = MathUtils.damp(currentScale, targetScale, 3, delta);
       group.scale.setScalar(newScale);
 
-      // 星球自转 - 往右下方转
+      // 星球自转 - 使用基于时间的绝对旋转，避免累积
+      // 只在Y轴上旋转，保持纹理水平
       const mainMesh = group.children[0] as THREE.Mesh;
       if (mainMesh) {
-        mainMesh.rotation.x += delta * objData.rotationSpeed.x;
-        mainMesh.rotation.y += delta * objData.rotationSpeed.y;
+        // 使用绝对时间计算旋转，而不是累积
+        mainMesh.rotation.y = time * objData.rotationSpeed.y + objData.floatPhase;
+        // X轴保持初始的轻微倾斜，不累积
       }
       
       // 聚合态漂浮
@@ -2250,7 +2255,7 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
   
-  // 生成电弧数据
+  // 生成电弧数据 - 增强霹雳效果
   const sparksData = useMemo(() => {
     const sparks: {
       tubeGeometry: THREE.TubeGeometry;
@@ -2258,15 +2263,16 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       flickerSpeed: number;
       flickerPhase: number;
       color: string;
+      isBranch: boolean; // 是否是分支电弧
     }[] = [];
     
-    // 沿闪电路径生成电弧
+    // 沿闪电路径生成电弧 - 增加数量
     for (let segIdx = 0; segIdx < lightningPath.length - 1; segIdx++) {
       const curr = lightningPath[segIdx];
       const next = lightningPath[segIdx + 1];
       
-      // 每段生成几个电弧
-      const sparksPerSegment = 6 + Math.floor(Math.random() * 4);
+      // 每段生成更多电弧
+      const sparksPerSegment = 12 + Math.floor(Math.random() * 8);
       
       for (let s = 0; s < sparksPerSegment; s++) {
         const t = Math.random();
@@ -2276,44 +2282,78 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         const angle = Math.random() * Math.PI * 2;
         const outwardDir = new THREE.Vector3(
           Math.cos(angle),
-          (Math.random() - 0.5) * 0.3,
+          (Math.random() - 0.5) * 0.5,
           Math.sin(angle)
         ).normalize();
         
-        // 生成不规则的电弧路径点
+        // 生成不规则的电弧路径点 - 更长更锐利
         const points: THREE.Vector3[] = [basePoint.clone()];
         let currentPoint = basePoint.clone();
-        const segments = 2 + Math.floor(Math.random() * 3);
-        const maxLength = 4 + Math.random() * 8;
+        const segments = 3 + Math.floor(Math.random() * 4); // 更多段
+        const maxLength = 8 + Math.random() * 15; // 更长
         
         for (let i = 0; i < segments; i++) {
-          const segmentLength = maxLength / segments * (0.6 + Math.random() * 0.8);
-          // 添加随机偏转 - 更锐利的转折
+          const segmentLength = maxLength / segments * (0.5 + Math.random() * 1.0);
+          // 更锐利的转折 - 增加抖动
           const jitter = new THREE.Vector3(
+            (Math.random() - 0.5) * 5,
             (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 2,
-            (Math.random() - 0.5) * 3
+            (Math.random() - 0.5) * 5
           );
           const direction = outwardDir.clone().add(jitter).normalize();
           currentPoint = currentPoint.clone().add(direction.multiplyScalar(segmentLength));
           points.push(currentPoint.clone());
         }
         
-        // 创建曲线和管道几何体
-        const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
-        const tubeGeometry = new THREE.TubeGeometry(curve, 8, 0.15 + Math.random() * 0.1, 4, false);
+        // 创建曲线和管道几何体 - 更粗
+        const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.05);
+        const tubeGeometry = new THREE.TubeGeometry(curve, 12, 0.2 + Math.random() * 0.15, 6, false);
         
-        // 颜色变化 - 白色到青色
-        const colors = ['#FFFFFF', '#E0FFFF', '#00FFFF', '#00BFFF', '#87CEEB'];
+        // 颜色变化 - 更亮的白色和青色
+        const colors = ['#FFFFFF', '#FFFFFF', '#F0FFFF', '#E0FFFF', '#00FFFF'];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
         sparks.push({
           tubeGeometry,
-          baseOpacity: 0.6 + Math.random() * 0.4,
-          flickerSpeed: 8 + Math.random() * 15,
+          baseOpacity: 0.7 + Math.random() * 0.3,
+          flickerSpeed: 15 + Math.random() * 25, // 更快闪烁
           flickerPhase: Math.random() * Math.PI * 2,
-          color
+          color,
+          isBranch: false
         });
+        
+        // 添加分支电弧 - 从主电弧末端分叉
+        if (Math.random() > 0.5 && points.length > 2) {
+          const branchStart = points[Math.floor(points.length / 2)];
+          const branchPoints: THREE.Vector3[] = [branchStart.clone()];
+          let branchPoint = branchStart.clone();
+          const branchSegments = 2 + Math.floor(Math.random() * 2);
+          const branchLength = 4 + Math.random() * 8;
+          
+          for (let b = 0; b < branchSegments; b++) {
+            const branchJitter = new THREE.Vector3(
+              (Math.random() - 0.5) * 6,
+              (Math.random() - 0.5) * 4,
+              (Math.random() - 0.5) * 6
+            );
+            branchPoint = branchPoint.clone().add(branchJitter.normalize().multiplyScalar(branchLength / branchSegments));
+            branchPoints.push(branchPoint.clone());
+          }
+          
+          if (branchPoints.length >= 2) {
+            const branchCurve = new THREE.CatmullRomCurve3(branchPoints, false, 'catmullrom', 0.05);
+            const branchGeometry = new THREE.TubeGeometry(branchCurve, 8, 0.1 + Math.random() * 0.1, 4, false);
+            
+            sparks.push({
+              tubeGeometry: branchGeometry,
+              baseOpacity: 0.5 + Math.random() * 0.3,
+              flickerSpeed: 20 + Math.random() * 30,
+              flickerPhase: Math.random() * Math.PI * 2,
+              color: '#00FFFF',
+              isBranch: true
+            });
+          }
+        }
       }
     }
     
@@ -2339,20 +2379,24 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     const isFormed = state === 'FORMED';
     timeRef.current = stateObj.clock.elapsedTime;
     
-    // 更新每个电弧的透明度 - 闪烁效果
+    // 更新每个电弧的透明度 - 更强烈的闪烁效果
     materials.forEach((mat, i) => {
       const spark = sparksData[i];
       
-      // 快速闪烁 - 更随机的闪烁模式
+      // 更激烈的闪烁 - 多重频率叠加
       const flicker1 = Math.sin(timeRef.current * spark.flickerSpeed + spark.flickerPhase);
-      const flicker2 = Math.sin(timeRef.current * spark.flickerSpeed * 1.7 + spark.flickerPhase * 2);
-      const combinedFlicker = (flicker1 + flicker2) / 2;
+      const flicker2 = Math.sin(timeRef.current * spark.flickerSpeed * 2.3 + spark.flickerPhase * 1.5);
+      const flicker3 = Math.sin(timeRef.current * spark.flickerSpeed * 0.7 + spark.flickerPhase * 3);
+      const combinedFlicker = (flicker1 + flicker2 * 0.5 + flicker3 * 0.3) / 1.8;
       
-      // 随机出现消失
-      const shouldShow = combinedFlicker > 0.2;
+      // 更频繁的出现 - 降低阈值
+      const shouldShow = combinedFlicker > -0.1;
       
-      const targetOpacity = isFormed && shouldShow ? spark.baseOpacity * (0.4 + combinedFlicker * 0.6) : 0;
-      mat.opacity = MathUtils.lerp(mat.opacity, targetOpacity, delta * 20);
+      // 分支电弧闪烁更快
+      const intensityMult = spark.isBranch ? 1.2 : 1.0;
+      
+      const targetOpacity = isFormed && shouldShow ? spark.baseOpacity * (0.5 + combinedFlicker * 0.5) * intensityMult : 0;
+      mat.opacity = MathUtils.lerp(mat.opacity, targetOpacity, delta * 25);
     });
   });
   
@@ -2444,9 +2488,9 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const textureIndex = hasRing ? 0 : ((i + 3) % PLANET_TEXTURE_PATHS.length);
       
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
-      // 星环倾斜角度 - 像真实土星那样，微微倾斜
+      // 星环倾斜角度 - 只在X轴上倾斜，保持纹理水平
       const ringTilt = Math.PI / 8 + Math.random() * Math.PI / 12; // 22.5° 到 37.5° X轴倾斜
-      const ringYaw = Math.random() * Math.PI * 2;  // Y轴随机旋转
+      const ringYaw = (Math.random() - 0.5) * Math.PI / 3;  // -30° 到 30° Y轴旋转，避免纹理变竖
       const axisTilt = (Math.random() - 0.5) * 0.1; // 保持纹理基本水平
       
       // 大气层颜色
@@ -2497,8 +2541,9 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           data.pos.y,
           data.pos.z + orbitZ
         );
+        // 使用基于时间的绝对旋转，避免累积
         const mainMesh = planet.children[0] as THREE.Mesh;
-        if (mainMesh) mainMesh.rotation.y += delta * data.rotationSpeed;
+        if (mainMesh) mainMesh.rotation.y = time * data.rotationSpeed + data.phase;
       }
     });
   });
