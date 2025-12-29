@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
-import { Canvas, useFrame, extend, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, extend, useThree, useLoader } from '@react-three/fiber';
 import {
   OrbitControls,
   Environment,
@@ -8,7 +8,8 @@ import {
   Float,
   Stars,
   Sparkles,
-  Html
+  Html,
+  useTexture
 } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -600,22 +601,22 @@ const createCinematicPlanetTexture = (
           shadow: { r: 30, g: 70, b: 120 }
         };
       case 'rocky':
-        // 岩石行星 - 灰棕色，更明亮
+        // 岩石行星 - 灰棕色，大幅提亮，增加对比度
         return {
-          primary: { r: clampColor(145 + seededRandom(1) * 45), g: clampColor(135 + seededRandom(2) * 40), b: clampColor(125 + seededRandom(3) * 35) },
-          secondary: { r: clampColor(165 + seededRandom(4) * 35), g: clampColor(155 + seededRandom(5) * 30), b: clampColor(145 + seededRandom(6) * 25) },
-          tertiary: { r: clampColor(115 + seededRandom(7) * 35), g: clampColor(105 + seededRandom(8) * 30), b: clampColor(95 + seededRandom(9) * 25) },
-          highlight: { r: 235, g: 230, b: 225 },
-          shadow: { r: 85, g: 80, b: 75 } // 暗部保留岩石纹理
+          primary: { r: clampColor(175 + seededRandom(1) * 45), g: clampColor(165 + seededRandom(2) * 40), b: clampColor(155 + seededRandom(3) * 35) },
+          secondary: { r: clampColor(200 + seededRandom(4) * 35), g: clampColor(190 + seededRandom(5) * 30), b: clampColor(180 + seededRandom(6) * 25) },
+          tertiary: { r: clampColor(145 + seededRandom(7) * 35), g: clampColor(135 + seededRandom(8) * 30), b: clampColor(125 + seededRandom(9) * 25) },
+          highlight: { r: 255, g: 250, b: 245 },
+          shadow: { r: 110, g: 105, b: 100 } // 暗部保留岩石纹理
         };
       case 'lava':
-        // 熔岩行星 - 深棕暗紫色调，更柔和
+        // 熔岩行星 - 深红棕色调，带发光裂缝
         return {
-          primary: { r: clampColor(70 + seededRandom(1) * 20), g: clampColor(55 + seededRandom(2) * 15), b: clampColor(60 + seededRandom(3) * 18) },
-          secondary: { r: clampColor(85 + seededRandom(4) * 20), g: clampColor(65 + seededRandom(5) * 15), b: clampColor(70 + seededRandom(6) * 18) },
-          tertiary: { r: clampColor(55 + seededRandom(7) * 18), g: clampColor(45 + seededRandom(8) * 12), b: clampColor(50 + seededRandom(9) * 15) },
-          highlight: { r: 180, g: 120, b: 90 }, // 柔和的橙棕色发光
-          shadow: { r: 40, g: 32, b: 35 }
+          primary: { r: clampColor(100 + seededRandom(1) * 30), g: clampColor(70 + seededRandom(2) * 20), b: clampColor(60 + seededRandom(3) * 18) },
+          secondary: { r: clampColor(130 + seededRandom(4) * 30), g: clampColor(85 + seededRandom(5) * 20), b: clampColor(70 + seededRandom(6) * 18) },
+          tertiary: { r: clampColor(80 + seededRandom(7) * 25), g: clampColor(55 + seededRandom(8) * 18), b: clampColor(50 + seededRandom(9) * 15) },
+          highlight: { r: 255, g: 180, b: 100 }, // 明亮的熔岩发光
+          shadow: { r: 50, g: 35, b: 30 }
         };
       case 'ocean':
         // 海洋行星 - 高对比度深蓝色，明显的海陆差异
@@ -1446,13 +1447,6 @@ const CINEMATIC_PLANET_PRESETS = [
   { hue: 200, type: 'ice_giant' as const, name: '海王星型' },
   { hue: 180, type: 'ice_giant' as const, name: '天王星型' },
   { hue: 210, type: 'ice_giant' as const, name: '冰巨星' },
-  // 岩石行星（类水星/月球）- 灰棕色
-  { hue: 30, type: 'rocky' as const, name: '水星型' },
-  { hue: 25, type: 'rocky' as const, name: '月球型' },
-  { hue: 20, type: 'rocky' as const, name: '小行星' },
-  // 熔岩行星 - 暗红发光
-  { hue: 10, type: 'lava' as const, name: '熔岩行星' },
-  { hue: 5, type: 'lava' as const, name: '火山世界' },
   // 海洋行星（类地球）- 蓝绿色
   { hue: 200, type: 'ocean' as const, name: '地球型' },
   { hue: 190, type: 'ocean' as const, name: '水世界' },
@@ -1461,6 +1455,18 @@ const CINEMATIC_PLANET_PRESETS = [
   { hue: 25, type: 'desert' as const, name: '火星型' },
   { hue: 35, type: 'desert' as const, name: '沙漠世界' },
   { hue: 40, type: 'desert' as const, name: '干旱行星' },
+];
+
+// 真实星球纹理路径（不包含地球）- 多放土星和天王星
+const PLANET_TEXTURE_PATHS = [
+  '/textures/saturnTexture.jpeg',    // 0 - 土星（带环用）
+  '/textures/jupiterTexture.jpeg',   // 1 - 木星
+  '/textures/uranusTexture.jpeg',    // 2 - 天王星
+  '/textures/jupiterTexture.jpeg',   // 3 - 木星
+  '/textures/uranusTexture.jpeg',    // 4 - 天王星
+  '/textures/jupiterTexture.jpeg',   // 5 - 木星
+  '/textures/uranusTexture.jpeg',    // 6 - 天王星
+  '/textures/marsTexture.jpeg',      // 7 - 火星
 ];
 
 const PlanetOrnaments = ({
@@ -1483,6 +1489,51 @@ const PlanetOrnaments = ({
   const focusRef = useRef<number | null>(null);
   const targetNdc = useRef(new THREE.Vector2());
   const proj = useRef(new THREE.Vector3());
+
+  // 预加载真实星球纹理
+  const realTextures = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    return PLANET_TEXTURE_PATHS.map(path => {
+      const tex = loader.load(path);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    });
+  }, []);
+
+  // 预加载土星环纹理
+  const saturnRingTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    const tex = loader.load('/textures/saturnRingsTexture.jpeg');
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // 设置纹理环绕方式，确保正确映射
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }, []);
+
+  // 创建正确UV映射的土星环几何体
+  const createSaturnRingGeometry = useMemo(() => {
+    return (innerRadius: number, outerRadius: number, segments: number = 128) => {
+      const geometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+      // 修正UV映射 - 让贴图从内到外正确显示
+      const pos = geometry.attributes.position;
+      const uv = geometry.attributes.uv;
+      
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const r = Math.sqrt(x * x + y * y);
+        // UV的v坐标从内圈(0)到外圈(1)线性映射
+        const v = (r - innerRadius) / (outerRadius - innerRadius);
+        // UV的u坐标围绕圆环
+        const angle = Math.atan2(y, x);
+        const u = (angle + Math.PI) / (2 * Math.PI);
+        uv.setXY(i, u, v);
+      }
+      uv.needsUpdate = true;
+      return geometry;
+    };
+  }, []);
 
   // 生成真实天文行星数据 - 带碰撞检测
   const data = useMemo(() => {
@@ -1607,20 +1658,20 @@ const PlanetOrnaments = ({
       // 不再做视觉补偿，保留真实的近大远小透视效果
       const compensatedSize = sizeMultiplier; // 直接使用原始大小，不补偿
 
-      // 使用 planet.tsx 风格的纹理生成
-      const textureType = mapPlanetTypeToTextureType(preset.type);
-      const baseColor = getPlanetBaseColor(preset.type, preset.hue);
-      const texture = generateProceduralTexture(textureType, baseColor);
-      
-      // 只有气态巨行星有环（类土星），蓝色星球不加环
+      // 使用真实星球纹理（循环使用8种纹理）
+      // 有星环的行星使用木星纹理（索引0）
       const hasRing = preset.type === 'gas_giant' && 
                       planetSize > 1.0 && Math.random() > 0.25;
-      const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
-      // 星环倾斜角度 - 确保始终有明显倾斜，避免荷包蛋效果
-      const ringTilt = Math.PI / 3 + Math.random() * Math.PI / 6; // 60° 到 90° 倾斜
+      const textureIndex = hasRing ? 0 : (i % PLANET_TEXTURE_PATHS.length);
       
-      // 行星轴倾斜 - 配合星环倾斜
-      const axisTilt = (Math.random() - 0.5) * 0.5;
+      const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
+      // 星环倾斜角度 - 像真实土星那样，微微倾斜，不要太夸张
+      // X轴倾斜约15-30度，让星环看起来像图片中那样优雅
+      const ringTilt = Math.PI / 8 + Math.random() * Math.PI / 12; // 22.5° 到 37.5° X轴倾斜
+      const ringYaw = Math.random() * Math.PI * 2;  // Y轴随机旋转，但因为倾斜角度小，不会正对摄像机
+      
+      // 行星轴倾斜 - 保持纹理基本水平，只有轻微倾斜
+      const axisTilt = (Math.random() - 0.5) * 0.1;
       
       // 大气层颜色（根据行星类型）
       const getAtmosphereColor = () => {
@@ -1639,9 +1690,9 @@ const PlanetOrnaments = ({
       const emissiveIntensity = preset.type === 'lava' ? 0.3 : 0.02;
       
       const rotationSpeed = {
-        x: (Math.random() - 0.5) * 0.1,
-        y: 0.03 + Math.random() * 0.1, // 自转速度
-        z: (Math.random() - 0.5) * 0.03
+        x: 0.02 + Math.random() * 0.03,  // 往下转
+        y: -(0.03 + Math.random() * 0.1), // 往右转（负值）
+        z: (Math.random() - 0.5) * 0.02
       };
 
       return {
@@ -1650,10 +1701,11 @@ const PlanetOrnaments = ({
         planetSize,
         compensatedSize, // 新增：透视补偿后的大小
         preset,
-        texture,
+        textureIndex, // 使用纹理索引而不是直接存储纹理
         hasRing,
         ringTexture,
         ringTilt,
+        ringYaw,
         axisTilt,
         atmosphereColor,
         emissiveIntensity,
@@ -1686,9 +1738,10 @@ const PlanetOrnaments = ({
       const newScale = MathUtils.damp(currentScale, targetScale, 3, delta);
       group.scale.setScalar(newScale);
 
-      // 星球自转
+      // 星球自转 - 往右下方转
       const mainMesh = group.children[0] as THREE.Mesh;
       if (mainMesh) {
+        mainMesh.rotation.x += delta * objData.rotationSpeed.x;
         mainMesh.rotation.y += delta * objData.rotationSpeed.y;
       }
       
@@ -1760,18 +1813,46 @@ const PlanetOrnaments = ({
               onSelect?.(CONFIG.photos.body[i % CONFIG.photos.body.length], colorStr, true);
             }}
           >
-            {/* 主体球 - 完全不透明的固体球体 */}
-            <mesh scale={[scale, scale, scale]} rotation={[obj.axisTilt, 0, 0]}>
-              <sphereGeometry args={[1, 64, 64]} />
-              <meshStandardMaterial 
-                map={obj.texture}
-                roughness={obj.preset.type === 'gas_giant' ? 0.85 : obj.preset.type === 'ice_giant' ? 0.8 : 0.9}
-                metalness={0.0}
-                emissive={obj.preset.type === 'lava' ? new THREE.Color('#704030') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
-                emissiveIntensity={obj.preset.type === 'lava' ? 0.25 : 0.05}
-                envMapIntensity={0.15}
-              />
-            </mesh>
+            {/* 带星环的星球 - 星球和星环一起倾斜，星环围绕赤道 */}
+            {showRing ? (
+              <group rotation={[obj.ringTilt, obj.ringYaw, 0]}>
+                {/* 主体球 */}
+                <mesh scale={[scale, scale, scale]}>
+                  <sphereGeometry args={[1, 64, 64]} />
+                  <meshStandardMaterial 
+                    map={realTextures[obj.textureIndex]}
+                    roughness={0.85}
+                    metalness={0.0}
+                    emissive={new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
+                    emissiveIntensity={0.05}
+                    envMapIntensity={0.15}
+                  />
+                </mesh>
+                {/* 星环 - 围绕赤道（水平放置，因为整个group已经倾斜） */}
+                <mesh scale={[scale, scale, scale]} rotation={[Math.PI / 2, 0, 0]} geometry={createSaturnRingGeometry(1.4, 2.3, 128)}>
+                  <meshBasicMaterial 
+                    map={saturnRingTexture}
+                    transparent 
+                    opacity={0.9}
+                    side={THREE.DoubleSide} 
+                    depthWrite={false}
+                  />
+                </mesh>
+              </group>
+            ) : (
+              /* 不带星环的星球 - 纹理保持水平，轻微倾斜 */
+              <mesh scale={[scale, scale, scale]} rotation={[0.15, 0, 0]}>
+                <sphereGeometry args={[1, 64, 64]} />
+                <meshStandardMaterial 
+                  map={realTextures[obj.textureIndex]}
+                  roughness={obj.preset.type === 'gas_giant' ? 0.85 : obj.preset.type === 'ice_giant' ? 0.8 : 0.9}
+                  metalness={0.0}
+                  emissive={obj.preset.type === 'lava' ? new THREE.Color('#704030') : new THREE.Color(obj.atmosphereColor).multiplyScalar(0.08)}
+                  emissiveIntensity={obj.preset.type === 'lava' ? 0.25 : 0.05}
+                  envMapIntensity={0.15}
+                />
+              </mesh>
+            )}
             
             {/* 边缘大气光晕 */}
             {isChaos && (
@@ -1785,22 +1866,6 @@ const PlanetOrnaments = ({
                   side={THREE.BackSide} 
                 />
               </mesh>
-            )}
-
-            {/* 行星环 - 土星环风格，横向环绕星球 */}
-            {showRing && (
-              <group rotation={[Math.PI / 2.5, 0.2, 0]}>
-                <mesh scale={[scale, scale, scale]}>
-                  <ringGeometry args={[1.35, 2.2, 128]} />
-                  <meshBasicMaterial 
-                    color="#d4b050"
-                    transparent 
-                    opacity={0.7}
-                    side={THREE.DoubleSide} 
-                    depthWrite={false}
-                  />
-                </mesh>
-              </group>
             )}
             
             {/* 聚焦时的轻微高亮 */}
@@ -2180,10 +2245,175 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   );
 };
 
+// --- Component: Lightning Sparks (霹雳电弧效果) ---
+const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const timeRef = useRef(0);
+  
+  // 生成电弧数据
+  const sparksData = useMemo(() => {
+    const sparks: {
+      tubeGeometry: THREE.TubeGeometry;
+      baseOpacity: number;
+      flickerSpeed: number;
+      flickerPhase: number;
+      color: string;
+    }[] = [];
+    
+    // 沿闪电路径生成电弧
+    for (let segIdx = 0; segIdx < lightningPath.length - 1; segIdx++) {
+      const curr = lightningPath[segIdx];
+      const next = lightningPath[segIdx + 1];
+      
+      // 每段生成几个电弧
+      const sparksPerSegment = 6 + Math.floor(Math.random() * 4);
+      
+      for (let s = 0; s < sparksPerSegment; s++) {
+        const t = Math.random();
+        const basePoint = new THREE.Vector3().lerpVectors(curr, next, t);
+        
+        // 电弧方向 - 随机向外
+        const angle = Math.random() * Math.PI * 2;
+        const outwardDir = new THREE.Vector3(
+          Math.cos(angle),
+          (Math.random() - 0.5) * 0.3,
+          Math.sin(angle)
+        ).normalize();
+        
+        // 生成不规则的电弧路径点
+        const points: THREE.Vector3[] = [basePoint.clone()];
+        let currentPoint = basePoint.clone();
+        const segments = 2 + Math.floor(Math.random() * 3);
+        const maxLength = 4 + Math.random() * 8;
+        
+        for (let i = 0; i < segments; i++) {
+          const segmentLength = maxLength / segments * (0.6 + Math.random() * 0.8);
+          // 添加随机偏转 - 更锐利的转折
+          const jitter = new THREE.Vector3(
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 3
+          );
+          const direction = outwardDir.clone().add(jitter).normalize();
+          currentPoint = currentPoint.clone().add(direction.multiplyScalar(segmentLength));
+          points.push(currentPoint.clone());
+        }
+        
+        // 创建曲线和管道几何体
+        const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
+        const tubeGeometry = new THREE.TubeGeometry(curve, 8, 0.15 + Math.random() * 0.1, 4, false);
+        
+        // 颜色变化 - 白色到青色
+        const colors = ['#FFFFFF', '#E0FFFF', '#00FFFF', '#00BFFF', '#87CEEB'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        sparks.push({
+          tubeGeometry,
+          baseOpacity: 0.6 + Math.random() * 0.4,
+          flickerSpeed: 8 + Math.random() * 15,
+          flickerPhase: Math.random() * Math.PI * 2,
+          color
+        });
+      }
+    }
+    
+    return sparks;
+  }, []);
+  
+  // 创建材质数组
+  const materials = useMemo(() => {
+    return sparksData.map(spark => {
+      return new THREE.MeshBasicMaterial({
+        color: spark.color,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+    });
+  }, [sparksData]);
+  
+  useFrame((stateObj, delta) => {
+    if (!groupRef.current) return;
+    const isFormed = state === 'FORMED';
+    timeRef.current = stateObj.clock.elapsedTime;
+    
+    // 更新每个电弧的透明度 - 闪烁效果
+    materials.forEach((mat, i) => {
+      const spark = sparksData[i];
+      
+      // 快速闪烁 - 更随机的闪烁模式
+      const flicker1 = Math.sin(timeRef.current * spark.flickerSpeed + spark.flickerPhase);
+      const flicker2 = Math.sin(timeRef.current * spark.flickerSpeed * 1.7 + spark.flickerPhase * 2);
+      const combinedFlicker = (flicker1 + flicker2) / 2;
+      
+      // 随机出现消失
+      const shouldShow = combinedFlicker > 0.2;
+      
+      const targetOpacity = isFormed && shouldShow ? spark.baseOpacity * (0.4 + combinedFlicker * 0.6) : 0;
+      mat.opacity = MathUtils.lerp(mat.opacity, targetOpacity, delta * 20);
+    });
+  });
+  
+  return (
+    <group ref={groupRef}>
+      {sparksData.map((spark, i) => (
+        <mesh key={`spark-${i}`} geometry={spark.tubeGeometry} material={materials[i]} />
+      ))}
+    </group>
+  );
+};
+
 // --- Component: Inner Planets (闪电内部精致宇宙) - 真实天文风格 ---
 const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const count = CONFIG.counts.innerPlanets;
+  
+  // 预加载真实星球纹理
+  const realTextures = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    return PLANET_TEXTURE_PATHS.map(path => {
+      const tex = loader.load(path);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    });
+  }, []);
+
+  // 预加载土星环纹理
+  const saturnRingTexture = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    const tex = loader.load('/textures/saturnRingsTexture.jpeg');
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // 设置纹理环绕方式，确保正确映射
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }, []);
+
+  // 创建正确UV映射的土星环几何体
+  const createSaturnRingGeometry = useMemo(() => {
+    return (innerRadius: number, outerRadius: number, segments: number = 128) => {
+      const geometry = new THREE.RingGeometry(innerRadius, outerRadius, segments);
+      // 修正UV映射 - 让贴图从内到外正确显示
+      const pos = geometry.attributes.position;
+      const uv = geometry.attributes.uv;
+      
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const r = Math.sqrt(x * x + y * y);
+        // UV的v坐标从内圈(0)到外圈(1)线性映射
+        const v = (r - innerRadius) / (outerRadius - innerRadius);
+        // UV的u坐标围绕圆环
+        const angle = Math.atan2(y, x);
+        const u = (angle + Math.PI) / (2 * Math.PI);
+        uv.setXY(i, u, v);
+      }
+      uv.needsUpdate = true;
+      return geometry;
+    };
+  }, []);
   
   // 使用真实天文行星预设
   const planetsData = useMemo(() => {
@@ -2195,9 +2425,6 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         (Math.random() - 0.5) * hollowHeight,
         (Math.random() - 0.5) * 12
       );
-      
-      // 独特的随机种子
-      const planetSeed = i * 2000 + 5000;
       
       // 闪电内部的星球更精致，大小分布更集中
       const sizeType = Math.random();
@@ -2212,13 +2439,15 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       
       const preset = CINEMATIC_PLANET_PRESETS[(i + 5) % CINEMATIC_PLANET_PRESETS.length]; // 偏移确保多样性
       
-      // 使用原来的纹理生成方式
-      const texture = createCinematicPlanetTexture(preset.hue, preset.type, size, planetSeed);
-      
+      // 有星环的行星使用木星纹理（索引0）
       const hasRing = preset.type === 'gas_giant' && size > 1.5 && Math.random() > 0.5;
+      const textureIndex = hasRing ? 0 : ((i + 3) % PLANET_TEXTURE_PATHS.length);
+      
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
-      const ringTilt = Math.PI / 5 + Math.random() * Math.PI / 4;
-      const axisTilt = (Math.random() - 0.5) * 0.3;
+      // 星环倾斜角度 - 像真实土星那样，微微倾斜
+      const ringTilt = Math.PI / 8 + Math.random() * Math.PI / 12; // 22.5° 到 37.5° X轴倾斜
+      const ringYaw = Math.random() * Math.PI * 2;  // Y轴随机旋转
+      const axisTilt = (Math.random() - 0.5) * 0.1; // 保持纹理基本水平
       
       // 大气层颜色
       const getAtmosphereColor = () => {
@@ -2238,8 +2467,8 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const orbitRadius = 0.2 + Math.random() * 0.5;
       
       return { 
-        pos, size, preset, texture,
-        hasRing, ringTexture, ringTilt, axisTilt,
+        pos, size, preset, textureIndex,
+        hasRing, ringTexture, ringTilt, ringYaw, axisTilt,
         rotationSpeed, orbitSpeed, orbitRadius, 
         atmosphereColor,
         phase: Math.random() * Math.PI * 2 
@@ -2256,10 +2485,11 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const planet = child as THREE.Group;
       const data = planetsData[i];
       
-      const targetScale = isFormed ? 1 : 0;
+      // FORMED 状态下隐藏，CHAOS 状态下显示
+      const targetScale = isFormed ? 0 : 1;
       planet.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 3);
       
-      if (isFormed) {
+      if (!isFormed) {
         const orbitX = Math.sin(time * data.orbitSpeed + data.phase) * data.orbitRadius;
         const orbitZ = Math.cos(time * data.orbitSpeed + data.phase) * data.orbitRadius;
         planet.position.set(
@@ -2277,20 +2507,46 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     <group ref={groupRef}>
       {planetsData.map((planet, i) => (
         <group key={i} position={[planet.pos.x, planet.pos.y, planet.pos.z]}>
-          {/* 星球主体 - 完全不透明固体，高粗糙度避免油亮 */}
-          <mesh rotation={[planet.axisTilt, 0, 0]}>
-            <sphereGeometry args={[planet.size, 64, 64]} />
-            <meshStandardMaterial
-              map={planet.texture}
-              roughness={0.9}
-              metalness={0.0}
-              emissive={planet.preset.type === 'lava' ? new THREE.Color('#704030') : undefined}
-              emissiveIntensity={planet.preset.type === 'lava' ? 0.2 : 0.02}
-            />
-          </mesh>
+          {/* 带星环的星球 - 星球和星环一起倾斜，星环围绕赤道 */}
+          {planet.hasRing ? (
+            <group rotation={[planet.ringTilt, planet.ringYaw, 0]}>
+              {/* 星球主体 */}
+              <mesh>
+                <sphereGeometry args={[planet.size, 64, 64]} />
+                <meshStandardMaterial
+                  map={realTextures[planet.textureIndex]}
+                  roughness={0.9}
+                  metalness={0.0}
+                  emissiveIntensity={0.02}
+                />
+              </mesh>
+              {/* 星环 - 围绕赤道 */}
+              <mesh rotation={[Math.PI / 2, 0, 0]} geometry={createSaturnRingGeometry(planet.size * 1.4, planet.size * 2.3, 64)}>
+                <meshBasicMaterial
+                  map={saturnRingTexture}
+                  transparent
+                  opacity={0.9}
+                  side={THREE.DoubleSide}
+                  depthWrite={false}
+                />
+              </mesh>
+            </group>
+          ) : (
+            /* 不带星环的星球 - 纹理保持水平，轻微倾斜 */
+            <mesh rotation={[0.15, 0, 0]}>
+              <sphereGeometry args={[planet.size, 64, 64]} />
+              <meshStandardMaterial
+                map={realTextures[planet.textureIndex]}
+                roughness={0.9}
+                metalness={0.0}
+                emissive={planet.preset.type === 'lava' ? new THREE.Color('#704030') : undefined}
+                emissiveIntensity={planet.preset.type === 'lava' ? 0.2 : 0.02}
+              />
+            </mesh>
+          )}
           
           {/* 边缘大气光晕 */}
-          <mesh rotation={[planet.axisTilt, 0, 0]}>
+          <mesh>
             <sphereGeometry args={[planet.size * 1.02, 24, 24]} />
             <meshBasicMaterial
               color={planet.atmosphereColor}
@@ -2300,21 +2556,6 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
               blending={THREE.AdditiveBlending}
             />
           </mesh>
-          
-          {/* 星环 */}
-          {planet.hasRing && planet.ringTexture && (
-            <group rotation={[planet.ringTilt, 0, 0]}>
-              <mesh rotation={[Math.PI / 2, 0, 0]}>
-                <ringGeometry args={[planet.size * 1.3, planet.size * 2.2, 64]} />
-                <meshBasicMaterial
-                  map={planet.ringTexture}
-                  transparent
-                  side={THREE.DoubleSide}
-                  depthWrite={false}
-                />
-              </mesh>
-            </group>
-          )}
         </group>
       ))}
     </group>
@@ -3904,8 +4145,8 @@ const OrbitingPlanet = ({
     const time = stateObj.clock.elapsedTime;
     const isFormed = state === 'FORMED';
     
-    // 目标透明度
-    const targetScale = isFormed ? 1 : 0;
+    // 目标透明度 - 只在CHAOS状态显示
+    const targetScale = isFormed ? 0 : 1;
     groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), delta * 2);
     
     if (isFormed) {
@@ -4468,8 +4709,6 @@ const Experience = ({
       {/* 散开时的宇宙粒子爆炸效果 */}
       <DisperseParticles state={sceneState} />
       
-      <Environment preset="night" background={false} />
-      
       {/* 银河背景 - 流动星尘，只在散开态显示 */}
       <MilkyWayGalaxy state={sceneState} />
       
@@ -4479,8 +4718,8 @@ const Experience = ({
       {/* 流星效果 - 只在散开态显示 */}
       <ShootingStars state={sceneState} />
       
-      {/* 动态环绕星球 - 只在散开态显示 */}
-      <DynamicOrbitingPlanets state={sceneState} />
+      {/* 动态环绕星球 - 已移除 */}
+      {/* <DynamicOrbitingPlanets state={sceneState} /> */}
 
       {/* 深空感光照系统 - 增强紫色氛围 */}
       <ambientLight intensity={sceneState === 'CHAOS' ? 0.3 : 0.8} color="#604070" />
@@ -4533,6 +4772,7 @@ const Experience = ({
 
       {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
       <BoltGlow state={sceneState} />
+      <LightningSparks state={sceneState} />
       <BoltFill state={sceneState} />
       <TopStar state={sceneState} />
       
@@ -4547,7 +4787,8 @@ const Experience = ({
            />
            <FairyLights state={sceneState} />
         </Suspense>
-        <InnerPlanets state={sceneState} />
+        {/* InnerPlanets 已移除 - 避免散开态中心光点 */}
+        {/* <InnerPlanets state={sceneState} /> */}
         {/* CosmicNebula removed to eliminate floating cubes */}
         {/* Sparkles 只在FORMED状态显示 */}
         {sceneState === 'FORMED' && (
