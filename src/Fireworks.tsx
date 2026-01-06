@@ -43,32 +43,33 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
     let fireworks: Firework[] = [];
     let animationId: number;
 
-    // 华丽配色：高饱和度，营造庆典感
+    // 配色：保留过年红金，增加光子青呼应闪电主题
     const colors = [
-      '255, 60, 60',   // Vivid Red
-      '255, 220, 50',  // Bright Gold
-      '60, 255, 255',  // Cyan (Matches theme)
-      '255, 100, 255', // Magenta
-      '100, 100, 255', // Royal Blue
-      '50, 255, 100'   // Neon Green
+      '255, 50, 50',   // 新年红
+      '255, 215, 0',   // 富贵金
+      '255, 255, 255', // 纯净白
+      '0, 240, 255',   // 光子青
+      '255, 100, 255', // 霓虹紫
     ];
 
     const createFirework = () => {
-      if (fireworks.length > 8) return;
+      // 限制数量，保持画面高级感
+      if (fireworks.length > 6) return;
 
-      // Position: Keep to sides (avoiding center text/logo)
+      // 布局：只在两侧发射，中间留给闪电
       const isLeft = Math.random() > 0.5;
-      const sideWidth = width * 0.30;
+      const sideMargin = width * 0.05;
+      const activeZone = width * 0.25;
 
       let xPos;
       if (isLeft) {
-        xPos = Math.random() * sideWidth;
+        xPos = sideMargin + Math.random() * activeZone;
       } else {
-        xPos = width - (Math.random() * sideWidth);
+        xPos = width - sideMargin - (Math.random() * activeZone);
       }
 
-      // Target height: 15% to 55% of screen (有高有低)
-      const targetY = height * 0.15 + Math.random() * (height * 0.40);
+      // 高度：整体降低
+      const targetY = height * 0.30 + Math.random() * (height * 0.35);
 
       const color = colors[Math.floor(Math.random() * colors.length)];
 
@@ -77,19 +78,19 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
         y: height,
         targetY: targetY,
         color: color,
-        speed: 12 + Math.random() * 6, // 加快上升速度
+        speed: 25 + Math.random() * 10, // 升空速度 - 更快
         particles: [],
         state: 'rising'
       });
     };
 
     const explode = (fw: Firework) => {
-      const particleCount = 100 + Math.random() * 60;
+      const particleCount = 80 + Math.random() * 50;
 
       for (let i = 0; i < particleCount; i++) {
         const angle = Math.random() * Math.PI * 2;
 
-        // "Blossom" Physics
+        // 爆炸爆发力 - 缩小范围
         const rawSpeed = Math.random();
         const speed = (rawSpeed * rawSpeed * 4) + 1;
 
@@ -100,7 +101,7 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
           vy: Math.sin(angle) * speed,
           alpha: 1,
           color: fw.color,
-          decay: 0.005 + Math.random() * 0.015,
+          decay: 0.02 + Math.random() * 0.03, // 消失速度 - 更快
           size: Math.random() * 2 + 0.5,
           flicker: Math.random() > 0.5
         });
@@ -108,13 +109,13 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
     };
 
     const update = () => {
-      // 只在 visible 为 true 时创建新烟花 - 提高生成频率
+      // 发射频率 - 加快
       if (visible && Math.random() < 0.08) {
         createFirework();
       }
 
       ctx.globalCompositeOperation = 'destination-out';
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; // 拖尾长度
       ctx.fillRect(0, 0, width, height);
 
       ctx.globalCompositeOperation = 'lighter';
@@ -124,14 +125,14 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
 
         if (fw.state === 'rising') {
           fw.y -= fw.speed;
-          fw.speed *= 0.98;
+          fw.speed *= 0.96; // 升空阻力 - 减小，保持速度
 
-          // Draw rising tail
+          // 绘制升空轨迹
           ctx.beginPath();
-          ctx.moveTo(fw.x, fw.y + 8);
+          ctx.moveTo(fw.x, fw.y + 10);
           ctx.lineTo(fw.x, fw.y);
           ctx.strokeStyle = `rgb(${fw.color})`;
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 1.5;
           ctx.stroke();
 
           if (fw.y <= fw.targetY || fw.speed < 1) {
@@ -145,12 +146,12 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
             p.x += p.vx;
             p.y += p.vy;
 
-            // High Drag: Freezes them in place horizontally
-            p.vx *= 0.91;
-            p.vy *= 0.91;
+            // 空气阻力 - 减小，让粒子飞得更快
+            p.vx *= 0.95;
+            p.vy *= 0.95;
 
-            // Almost NO Gravity
-            p.vy += 0.01;
+            // 重力：很小，营造太空/失重感
+            p.vy += 0.015;
 
             p.alpha -= p.decay;
 
@@ -196,6 +197,7 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
     };
   }, [visible]);
 
+  // 降低透明度，让烟花作为背景点缀
   return (
     <canvas
       ref={canvasRef}
@@ -206,7 +208,7 @@ const Fireworks: React.FC<FireworksProps> = ({ visible }) => {
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        opacity: visible ? 0.7 : 0,
+        opacity: visible ? 0.6 : 0,
         transition: 'opacity 0.5s ease',
         zIndex: 5
       }}

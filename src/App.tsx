@@ -110,7 +110,7 @@ const FoliageMaterial = shaderMaterial(
     float t = cubicInOut(uProgress);
     vec3 finalPos = mix(position, aTargetPos + noise, t);
     vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-    gl_PointSize = (70.0 * (1.0 + aRandom)) / -mvPosition.z;
+    gl_PointSize = (40.0 * (1.0 + aRandom)) / -mvPosition.z;
     gl_Position = projectionMatrix * mvPosition;
     vMix = t;
   }`,
@@ -2451,8 +2451,8 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const curr = lightningPath[segIdx];
       const next = lightningPath[segIdx + 1];
       
-      // 每段生成更多电弧
-      const sparksPerSegment = 12 + Math.floor(Math.random() * 8);
+      // 每段生成电弧 - 适中数量
+      const sparksPerSegment = 3 + Math.floor(Math.random() * 3);
       
       for (let s = 0; s < sparksPerSegment; s++) {
         const t = Math.random();
@@ -3966,7 +3966,7 @@ const ShootingStars = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const startPos = new THREE.Vector3(
         100 + cfg.x,      // 右侧
         200 + cfg.y,      // 上方
-        -50 + idx * 10    // 不同深度
+        -150 + idx * 10   // 更远的深度，确保在闪电后面
       );
       
       return {
@@ -4999,7 +4999,7 @@ const Experience = ({
       <BoltGlow state={sceneState} />
       <LightningSparks state={sceneState} />
       <BoltFill state={sceneState} />
-      <TopStar state={sceneState} />
+      {/* TopStar 已移除 - 去掉顶部大光球 */}
       
       <group ref={sceneGroupRef} position={[0, 0, 0]}>
         <Foliage state={sceneState} />
@@ -5015,14 +5015,7 @@ const Experience = ({
         {/* InnerPlanets 已移除 - 避免散开态中心光点 */}
         {/* <InnerPlanets state={sceneState} /> */}
         {/* CosmicNebula removed to eliminate floating cubes */}
-        {/* Sparkles 只在FORMED状态显示 */}
-        {sceneState === 'FORMED' && (
-          <>
-            <Sparkles count={1500} scale={150} size={18} speed={0} opacity={0.5} color="#8A2BE2" />
-            <Sparkles count={1000} scale={130} size={12} speed={0} opacity={0.4} color="#00FFFF" />
-            <Sparkles count={800} scale={100} size={8} speed={0} opacity={0.35} color="#87CEEB" />
-          </>
-        )}
+        {/* Sparkles 已移除 - 去掉背景发光点 */}
       </group>
 
       <EffectComposer>
