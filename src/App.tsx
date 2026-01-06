@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, extend, useThree, useLoader } from '@react-three/fiber';
+import Fireworks from './Fireworks';
 import {
   OrbitControls,
   Environment,
@@ -116,9 +117,9 @@ const FoliageMaterial = shaderMaterial(
   `uniform vec3 uColor; varying float vMix;
   void main() {
     float r = distance(gl_PointCoord, vec2(0.5)); if (r > 0.5) discard;
-    vec3 coreColor = vec3(1.0, 0.0, 1.0); // 霓虹粉
+    vec3 coreColor = vec3(1.0, 1.0, 1.0); // 白色核心
     vec3 outerColor = vec3(0.0, 1.0, 1.0); // 青色
-    vec3 finalColor = mix(outerColor * 0.5, coreColor * 1.5, vMix);
+    vec3 finalColor = mix(outerColor * 0.6, coreColor * 1.2, vMix);
     float glow = 1.0 - r * 2.0;
     gl_FragColor = vec4(finalColor * (1.0 + glow * 0.5), 1.0);
   }`
@@ -271,9 +272,9 @@ const Foliage = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     for (let i = 0; i < count; i++) {
       positions[i*3] = spherePoints[i*3]; positions[i*3+1] = spherePoints[i*3+1]; positions[i*3+2] = spherePoints[i*3+2];
       let [tx, ty, tz] = getLightningPosition();
-      // 中部开缝 + 部分点向右侧填充，增厚右侧
+      // 中部开缝
       let targetVec = applyMidGap(new THREE.Vector3(tx, ty, tz));
-      if (Math.random() < 0.35) targetVec = addSideFill(targetVec);
+      // 移除右侧填充粒子
       tx = targetVec.x; ty = targetVec.y; tz = targetVec.z;
       targetPositions[i*3] = tx; targetPositions[i*3+1] = ty; targetPositions[i*3+2] = tz;
       randoms[i] = Math.random();
@@ -2168,7 +2169,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     return particles;
   }, [flameColors]);
   
-  // 创建火焰光晕管道 - 作为背景辉光（直线路径）
+  // 创建火焰光晕管道 - 只保留核心粗线条
   const glowTubes = useMemo(() => {
     const tubes: { geometry: THREE.TubeGeometry; color: string; opacity: number }[] = [];
     
@@ -2179,16 +2180,62 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       // 直线路径 - 只用起点和终点，不添加任何抖动
       const curve = new THREE.LineCurve3(curr.clone(), next.clone());
       
-      // 多层辉光 - 蓝色系
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 0.4, 8, false), color: '#FFFFFF', opacity: 0.9 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 1.0, 8, false), color: '#00FFFF', opacity: 0.5 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 2.5, 8, false), color: '#00BFFF', opacity: 0.25 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 5.0, 8, false), color: '#1E90FF', opacity: 0.12 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 8.0, 8, false), color: '#4169E1', opacity: 0.06 });
+      // 只保留核心线条，带蓝色调
+      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 0.5, 8, false), color: '#A0E0FF', opacity: 0.95 });
+      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 1.2, 8, false), color: '#00CFFF', opacity: 0.6 });
     }
     
     return tubes;
   }, []);
+  
+  // 在每个折角点添加短管道覆盖，填补断裂（保持锋利感）
+  const cornerTubes = useMemo(() => {
+    const tubes: { geometry: THREE.TubeGeometry; color: string; opacity: number }[] = [];
+    
+    // 为每个顶点创建连接前后线段的短管道
+    for (let i = 0; i < lightningPath.length; i++) {
+      const curr = lightningPath[i];
+      const prev = lightningPath[(i - 1 + lightningPath.length) % lightningPath.length];
+      const next = lightningPath[(i + 1) % lightningPath.length];
+      
+      // 从前一段末端延伸一小段到当前点
+      const toPrev = prev.clone().sub(curr).normalize();
+      const toNext = next.clone().sub(curr).normalize();
+      
+      // 创建两个短管道：从当前点向前后各延伸一小段
+      const extendDist = 3; // 延伸距离
+      const startPrev = curr.clone().add(toPrev.clone().multiplyScalar(extendDist));
+      const startNext = curr.clone().add(toNext.clone().multiplyScalar(extendDist));
+      
+      // 短管道1：从前一段方向到当前点
+      const curve1 = new THREE.LineCurve3(startPrev, curr.clone());
+      // 短管道2：从当前点到下一段方向
+      const curve2 = new THREE.LineCurve3(curr.clone(), startNext);
+      
+      // 只保留核心线条，带蓝色调
+      tubes.push({ geometry: new THREE.TubeGeometry(curve1, 2, 0.6, 8, false), color: '#A0E0FF', opacity: 0.95 });
+      tubes.push({ geometry: new THREE.TubeGeometry(curve1, 2, 1.4, 8, false), color: '#00CFFF', opacity: 0.6 });
+      
+      tubes.push({ geometry: new THREE.TubeGeometry(curve2, 2, 0.6, 8, false), color: '#A0E0FF', opacity: 0.95 });
+      tubes.push({ geometry: new THREE.TubeGeometry(curve2, 2, 1.4, 8, false), color: '#00CFFF', opacity: 0.6 });
+    }
+    
+    return tubes;
+  }, []);
+  
+  // 折角管道材质
+  const cornerTubeMaterials = useMemo(() => {
+    return cornerTubes.map(({ color }) => {
+      return new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+    });
+  }, [cornerTubes]);
   
   // 管道材质
   const tubeMaterials = useMemo(() => {
@@ -2217,6 +2264,15 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
       mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 4, delta);
     });
+    
+    // 更新折角管道辉光
+    cornerTubeMaterials.forEach((mat, i) => {
+      const baseOpacity = cornerTubes[i].opacity;
+      const pulse = 0.85 + Math.sin(timeRef.current * 3 + i * 0.3) * 0.15;
+      const flicker = 0.9 + Math.random() * 0.1;
+      const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
+      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 4, delta);
+    });
   });
 
   return (
@@ -2224,6 +2280,11 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       {/* 背景辉光管道 */}
       {glowTubes.map((tube, i) => (
         <mesh key={`tube-${i}`} geometry={tube.geometry} material={tubeMaterials[i]} />
+      ))}
+      
+      {/* 折角管道覆盖 */}
+      {cornerTubes.map((tube, i) => (
+        <mesh key={`corner-${i}`} geometry={tube.geometry} material={cornerTubeMaterials[i]} />
       ))}
       
       {/* 火焰粒子 */}
@@ -2239,6 +2300,132 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           state={state}
         />
       ))}
+    </group>
+  );
+};
+
+// --- Component: Lightning Aura (闪电背景蓝色雾气) ---
+const LightningAura = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const mesh2Ref = useRef<THREE.Mesh>(null);
+  const opacityRef = useRef(0);
+  
+  // 自定义雾气着色器材质
+  const auraMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: 0 },
+        uTime: { value: 0 },
+        uColor1: { value: new THREE.Color('#0064FF') },
+        uColor2: { value: new THREE.Color('#0096FF') },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        uniform float uTime;
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        varying vec2 vUv;
+        
+        void main() {
+          // 椭圆渐变
+          vec2 center = vec2(0.5, 0.5);
+          vec2 diff = vUv - center;
+          diff.x *= 1.2; // 横向拉伸
+          float dist = length(diff) * 2.0;
+          
+          // 柔和的径向渐变
+          float alpha = 1.0 - smoothstep(0.0, 1.0, dist);
+          alpha = pow(alpha, 2.0);
+          
+          // 颜色混合
+          vec3 color = mix(uColor1, uColor2, dist * 0.5);
+          
+          gl_FragColor = vec4(color, alpha * uOpacity * 0.04);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  }, []);
+  
+  // 第二层紫色雾气
+  const aura2Material = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uOpacity: { value: 0 },
+        uTime: { value: 0 },
+        uColor1: { value: new THREE.Color('#6432C8') },
+        uColor2: { value: new THREE.Color('#5064FF') },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        uniform float uTime;
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        varying vec2 vUv;
+        
+        void main() {
+          vec2 center = vec2(0.5, 0.5);
+          vec2 diff = vUv - center;
+          diff.x *= 1.3;
+          float dist = length(diff) * 2.0;
+          
+          float alpha = 1.0 - smoothstep(0.0, 1.0, dist);
+          alpha = pow(alpha, 2.5);
+          
+          // 呼吸效果
+          float pulse = 0.8 + sin(uTime * 0.8) * 0.2;
+          
+          vec3 color = mix(uColor1, uColor2, dist * 0.6);
+          
+          gl_FragColor = vec4(color, alpha * uOpacity * 0.025 * pulse);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  }, []);
+  
+  useFrame((stateObj, delta) => {
+    const isFormed = state === 'FORMED';
+    const targetOpacity = isFormed ? 1 : 0;
+    opacityRef.current = MathUtils.damp(opacityRef.current, targetOpacity, 3, delta);
+    
+    auraMaterial.uniforms.uOpacity.value = opacityRef.current;
+    auraMaterial.uniforms.uTime.value = stateObj.clock.elapsedTime;
+    
+    aura2Material.uniforms.uOpacity.value = opacityRef.current;
+    aura2Material.uniforms.uTime.value = stateObj.clock.elapsedTime;
+  });
+  
+  return (
+    <group>
+      {/* 第一层：大范围蓝色雾气 */}
+      <mesh ref={meshRef} position={[0, 0, -20]} material={auraMaterial}>
+        <planeGeometry args={[250, 350]} />
+      </mesh>
+      {/* 第二层：紫色呼吸雾气 */}
+      <mesh ref={mesh2Ref} position={[0, 0, -25]} material={aura2Material}>
+        <planeGeometry args={[200, 300]} />
+      </mesh>
     </group>
   );
 };
@@ -4736,8 +4923,7 @@ const Experience = ({
         </>
       )}
       
-      {/* 流动星空 - 动态层，只在FORMED状态显示 */}
-      {sceneState === 'FORMED' && <FlowingStars />}
+
       
       {/* 宇宙微尘 - 两种状态都显示，增加星空感 */}
       <CosmicDust />
@@ -4806,6 +4992,9 @@ const Experience = ({
         </>
       )}
 
+      {/* 闪电背景蓝色雾气 */}
+      <LightningAura state={sceneState} />
+      
       {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
       <BoltGlow state={sceneState} />
       <LightningSparks state={sceneState} />
@@ -5073,6 +5262,9 @@ export default function GrandTreeApp() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
+      {/* 烟花特效 - 只在 FORMED（聚合态/闪电形状）时显示 */}
+      <Fireworks visible={sceneState === 'FORMED'} />
+      
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
         <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
             <Experience
@@ -5209,13 +5401,33 @@ export default function GrandTreeApp() {
 
       {/* UI - AI Status */}
       <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
-        <div style={{ color: '#FFD700', fontSize: '22px', letterSpacing: '1.5px', fontWeight: 'bold', textShadow: '0 0 10px rgba(255,215,0,0.6)' }}>
+        <div style={{ 
+          fontSize: '22px', 
+          letterSpacing: '3px', 
+          fontWeight: 800,
+          background: 'linear-gradient(to right, #22D3EE, #FFFFFF, #3B82F6)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          filter: 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.6))',
+          userSelect: 'none'
+        }}>
           光子工作室祝大家新年快乐！
         </div>
-        <div style={{ color: '#FFD700', fontSize: '22px', letterSpacing: '1.5px', fontWeight: 'bold', textShadow: '0 0 10px rgba(255,215,0,0.6)' }}>
+        <div style={{ 
+          fontSize: '22px', 
+          letterSpacing: '3px', 
+          fontWeight: 800,
+          background: 'linear-gradient(to right, #22D3EE, #FFFFFF, #3B82F6)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          filter: 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.6))',
+          userSelect: 'none'
+        }}>
           感谢每一个闪闪发光的你
         </div>
-        <div style={{ color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(255, 215, 0, 0.4)', fontSize: '10px', letterSpacing: '2px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
+        <div style={{ color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(0, 240, 255, 0.5)', fontSize: '10px', letterSpacing: '2px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
           {aiStatus}
         </div>
       </div>
