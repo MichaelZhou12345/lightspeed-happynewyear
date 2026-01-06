@@ -1661,9 +1661,9 @@ const PlanetOrnaments = ({
       const compensatedSize = sizeMultiplier; // 直接使用原始大小，不补偿
 
       // 使用真实星球纹理（循环使用8种纹理）
-      // 有星环的行星使用木星纹理（索引0）
+      // 有星环的行星使用木星纹理（索引0）- 降低星环概率，只有15%的大型气态巨行星有星环
       const hasRing = preset.type === 'gas_giant' && 
-                      planetSize > 1.0 && Math.random() > 0.25;
+                      planetSize > 1.2 && Math.random() > 0.85;
       const textureIndex = hasRing ? 0 : (i % PLANET_TEXTURE_PATHS.length);
       
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
@@ -1741,14 +1741,7 @@ const PlanetOrnaments = ({
       const newScale = MathUtils.damp(currentScale, targetScale, 3, delta);
       group.scale.setScalar(newScale);
 
-      // 星球自转 - 使用基于时间的绝对旋转，避免累积
-      // 只在Y轴上旋转，保持纹理水平
-      const mainMesh = group.children[0] as THREE.Mesh;
-      if (mainMesh) {
-        // 使用绝对时间计算旋转，而不是累积
-        mainMesh.rotation.y = time * objData.rotationSpeed.y + objData.floatPhase;
-        // X轴保持初始的轻微倾斜，不累积
-      }
+      // 星球不自转，保持固定角度
       
       // 聚合态漂浮
       if (isFormed) {
@@ -2483,8 +2476,8 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       
       const preset = CINEMATIC_PLANET_PRESETS[(i + 5) % CINEMATIC_PLANET_PRESETS.length]; // 偏移确保多样性
       
-      // 有星环的行星使用木星纹理（索引0）
-      const hasRing = preset.type === 'gas_giant' && size > 1.5 && Math.random() > 0.5;
+      // 有星环的行星使用木星纹理（索引0）- 降低星环概率
+      const hasRing = preset.type === 'gas_giant' && size > 2.0 && Math.random() > 0.8;
       const textureIndex = hasRing ? 0 : ((i + 3) % PLANET_TEXTURE_PATHS.length);
       
       const ringTexture = hasRing ? createRealisticRingTexture(preset.type) : null;
@@ -2541,9 +2534,7 @@ const InnerPlanets = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           data.pos.y,
           data.pos.z + orbitZ
         );
-        // 使用基于时间的绝对旋转，避免累积
-        const mainMesh = planet.children[0] as THREE.Mesh;
-        if (mainMesh) mainMesh.rotation.y = time * data.rotationSpeed + data.phase;
+        // 星球不自转，保持固定角度
       }
     });
   });
@@ -5077,13 +5068,8 @@ export default function GrandTreeApp() {
     }
   }, [sceneState]);
 
-  useEffect(() => {
-    // 只有在手势捏合触发的预览才会因为松开手势而关闭
-    // 点击触发的预览不受pinchActive影响
-    if (!pinchActive && selectedPhoto && !isClickTriggered) {
-      setSelectedPhoto(null); // 松开捏合时关闭预览
-    }
-  }, [pinchActive, selectedPhoto, isClickTriggered]);
+  // 图片弹出后一直显示，直到用户点击屏幕才关闭
+  // 不再因为松开捏合手势而自动关闭
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
@@ -5121,21 +5107,7 @@ export default function GrandTreeApp() {
         onPinch={(active: boolean) => setPinchActive(active)}
       />
 
-      {/* UI - Stats */}
-      <div style={{ position: 'absolute', bottom: '30px', left: '40px', color: '#888', zIndex: 10, fontFamily: 'sans-serif', userSelect: 'none' }}>
-        <div style={{ marginBottom: '15px' }}>
-          <p style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>Memories</p>
-          <p style={{ fontSize: '24px', color: '#FFD700', fontWeight: 'bold', margin: 0 }}>
-            {CONFIG.counts.ornamentsChaos.toLocaleString()} <span style={{ fontSize: '10px', color: '#555', fontWeight: 'normal' }}>POLAROIDS (CHAOS)</span>
-          </p>
-        </div>
-        <div>
-          <p style={{ fontSize: '10px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>Foliage</p>
-          <p style={{ fontSize: '24px', color: '#004225', fontWeight: 'bold', margin: 0 }}>
-            {(CONFIG.counts.foliage / 1000).toFixed(0)}K <span style={{ fontSize: '10px', color: '#555', fontWeight: 'normal' }}>EMERALD NEEDLES</span>
-          </p>
-        </div>
-      </div>
+
 
       {/* UI - Buttons */}
       <div style={{ position: 'absolute', bottom: isMobile ? '20px' : '30px', right: isMobile ? '20px' : '40px', zIndex: 10, display: 'flex', gap: isMobile ? '8px' : '10px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', width: isMobile ? '180px' : 'auto' }}>
@@ -5150,25 +5122,86 @@ export default function GrandTreeApp() {
       {/* UI - Photo Preview */}
       {selectedPhoto && (
         <div onClick={() => { setSelectedPhoto(null); setIsClickTriggered(false); }} style={{ position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'min(94vw, 520px)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ background: selectedPhoto.borderColor, borderRadius: '14px', padding: '10px', boxShadow: '0 24px 70px rgba(0,0,0,0.65)' }}>
-              <div style={{ borderRadius: '10px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'min(94vw, 560px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ background: selectedPhoto.borderColor, borderRadius: '18px', padding: '16px', boxShadow: '0 24px 70px rgba(0,0,0,0.65)' }}>
+              <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
                 <img
                   src={selectedPhoto.path}
                   alt="Selected memory"
                   style={{
                     display: 'block',
-                    maxWidth: 'min(90vw, 500px)',
-                    maxHeight: '70vh',
+                    maxWidth: 'min(88vw, 528px)',
+                    maxHeight: '65vh',
                     width: 'auto',
                     height: 'auto',
                     objectFit: 'contain'
                   }}
                 />
               </div>
-              <div style={{ marginTop: '10px', padding: '8px 6px 0', textAlign: 'center', color: '#222', fontSize: '15px', fontWeight: 600, letterSpacing: '0.5px' }}>
+              <div style={{ marginTop: '14px', padding: '10px 8px 0', textAlign: 'center', color: '#222', fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px' }}>
                 {selectedPhoto.message}
               </div>
+            </div>
+            {/* 保存和分享按钮 */}
+            <div style={{ display: 'flex', gap: '40px', justifyContent: 'center' }}>
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const response = await fetch(selectedPhoto.path);
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `memory-${Date.now()}.jpg`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('保存图片失败:', err);
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  maxWidth: '160px',
+                  padding: '14px 24px',
+                  backgroundColor: 'rgba(255, 215, 0, 0.9)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  color: '#222',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(255, 215, 0, 0.3)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                保存寄语
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // 分享功能暂未实现
+                  console.log('分享功能待实现');
+                }}
+                style={{
+                  flex: 1,
+                  maxWidth: '160px',
+                  padding: '14px 24px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 215, 0, 0.5)',
+                  borderRadius: '12px',
+                  color: '#FFD700',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                分享寄语
+              </button>
             </div>
           </div>
         </div>
