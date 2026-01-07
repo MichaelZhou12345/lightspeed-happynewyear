@@ -2256,22 +2256,22 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     const isFormed = state === 'FORMED';
     timeRef.current = stateObj.clock.elapsedTime;
     
-    // 更新管道辉光
+    // 更新管道辉光 - 加快消散
     tubeMaterials.forEach((mat, i) => {
       const baseOpacity = glowTubes[i].opacity;
       const pulse = 0.85 + Math.sin(timeRef.current * 3 + i * 0.5) * 0.15;
       const flicker = 0.9 + Math.random() * 0.1; // 火焰闪烁
       const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
-      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 4, delta);
+      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 12, delta);
     });
     
-    // 更新折角管道辉光
+    // 更新折角管道辉光 - 加快消散
     cornerTubeMaterials.forEach((mat, i) => {
       const baseOpacity = cornerTubes[i].opacity;
       const pulse = 0.85 + Math.sin(timeRef.current * 3 + i * 0.3) * 0.15;
       const flicker = 0.9 + Math.random() * 0.1;
       const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
-      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 4, delta);
+      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 12, delta);
     });
   });
 
@@ -2407,7 +2407,7 @@ const LightningAura = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   useFrame((stateObj, delta) => {
     const isFormed = state === 'FORMED';
     const targetOpacity = isFormed ? 1 : 0;
-    opacityRef.current = MathUtils.damp(opacityRef.current, targetOpacity, 3, delta);
+    opacityRef.current = MathUtils.damp(opacityRef.current, targetOpacity, 10, delta);
     
     auraMaterial.uniforms.uOpacity.value = opacityRef.current;
     auraMaterial.uniforms.uTime.value = stateObj.clock.elapsedTime;
