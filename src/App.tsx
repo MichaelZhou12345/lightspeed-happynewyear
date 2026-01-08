@@ -2100,111 +2100,126 @@ const FlameParticle = ({
   );
 };
 
-// --- Component: Bolt Glow (火焰能量边缘效果 - 柔和波动粒子风格) ---
+// --- Component: Bolt Glow (实心填充闪电 - 粒子完全填满形状) ---
 const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const timeRef = useRef(0);
   const progressRef = useRef(state === 'FORMED' ? 1 : 0);
   
-  // 生成轮廓粒子数据 - 柔和波动风格
+  // 检测点是否在闪电多边形内部
+  const isPointInLightning = (x: number, y: number): boolean => {
+    const polygon = lightningPath.map(p => ({ x: p.x, y: p.y }));
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+  
+  // 计算点到多边形边缘的最近距离
+  const distanceToEdge = (x: number, y: number): number => {
+    let minDist = Infinity;
+    for (let i = 0, j = lightningPath.length - 1; i < lightningPath.length; j = i++) {
+      const xi = lightningPath[i].x, yi = lightningPath[i].y;
+      const xj = lightningPath[j].x, yj = lightningPath[j].y;
+      
+      // 计算点到线段的距离
+      const dx = xj - xi;
+      const dy = yj - yi;
+      const len2 = dx * dx + dy * dy;
+      
+      let t = Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2));
+      const projX = xi + t * dx;
+      const projY = yi + t * dy;
+      
+      const dist = Math.sqrt((x - projX) ** 2 + (y - projY) ** 2);
+      minDist = Math.min(minDist, dist);
+    }
+    return minDist;
+  };
+
+  // 获取闪电边界框
+  const getBounds = () => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    lightningPath.forEach(p => {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    });
+    return { minX, maxX, minY, maxY };
+  };
+  
+  // 生成填充粒子数据 - 完全填满闪电形状
   const { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds } = useMemo(() => {
-    const particleCount = 18000; // 更多粒子让边缘更柔和密集
+    const particleCount = 10000; // 粒子填满形状，稀疏一些
     const positions = new Float32Array(particleCount * 3);
     const targetPositions = new Float32Array(particleCount * 3);
     const dispersePositions = new Float32Array(particleCount * 3);
     const colors = new Float32Array(particleCount * 3);
     const sizes = new Float32Array(particleCount);
     const randoms = new Float32Array(particleCount);
-    const noiseSeeds = new Float32Array(particleCount * 2); // 用于波动的噪声种子
+    const noiseSeeds = new Float32Array(particleCount * 2);
     
-    // 颜色渐变 - 参考图的青白到橙色渐变
+    // 颜色渐变
     const topColor = new THREE.Color('#80E0FF');    // 顶部青色
     const midColor = new THREE.Color('#E0B0FF');    // 中间淡紫粉
     const bottomColor = new THREE.Color('#FFB060'); // 底部橙色
     const coreColor = new THREE.Color('#FFFFFF');   // 核心白色
     
-    // 先计算所有线段的总长度和累计长度
-    let totalLength = 0;
-    const segmentLengths: number[] = [];
-    const cumulativeLengths: number[] = [0];
-    for (let segIdx = 0; segIdx < lightningPath.length; segIdx++) {
-      const curr = lightningPath[segIdx];
-      const next = lightningPath[(segIdx + 1) % lightningPath.length];
-      const len = curr.distanceTo(next);
-      segmentLengths.push(len);
-      totalLength += len;
-      cumulativeLengths.push(totalLength);
-    }
-    
-    // 获取闪电的Y范围用于颜色渐变
-    let minY = Infinity, maxY = -Infinity;
-    lightningPath.forEach(p => {
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    });
+    const bounds = getBounds();
+    const edgeSoftness = 8; // 边缘柔和区域宽度
     
     let idx = 0;
+    let attempts = 0;
+    const maxAttempts = particleCount * 30;
     
-    // 根据线段长度比例分配粒子
-    for (let segIdx = 0; segIdx < lightningPath.length && idx < particleCount; segIdx++) {
-      const curr = lightningPath[segIdx];
-      const next = lightningPath[(segIdx + 1) % lightningPath.length];
-      const segmentLength = segmentLengths[segIdx];
+    while (idx < particleCount && attempts < maxAttempts) {
+      attempts++;
       
-      const particlesForSegment = Math.floor((segmentLength / totalLength) * particleCount);
+      // 扩大采样范围，允许一些粒子在边缘外形成柔和过渡
+      const expandMargin = 5;
+      const x = bounds.minX - expandMargin + Math.random() * (bounds.maxX - bounds.minX + expandMargin * 2);
+      const y = bounds.minY - expandMargin + Math.random() * (bounds.maxY - bounds.minY + expandMargin * 2);
       
-      // 计算线段方向和法向量
-      const segDir = new THREE.Vector3().subVectors(next, curr).normalize();
-      const perpX = new THREE.Vector3(-segDir.y, segDir.x, 0).normalize();
-      const perpZ = new THREE.Vector3(0, 0, 1);
+      const isInside = isPointInLightning(x, y);
+      const edgeDist = distanceToEdge(x, y);
       
-      for (let p = 0; p < particlesForSegment && idx < particleCount; p++) {
-        const t = p / particlesForSegment;
-        
-        // 基础位置
-        const basePos = new THREE.Vector3().lerpVectors(curr, next, t);
-        
-        // 柔和的边缘分布 - 使用多层高斯分布
-        const layerRandom = Math.random();
-        let distFromCenter: number;
-        let sizeMultiplier: number;
-        let alphaMultiplier: number;
-        
-        if (layerRandom < 0.35) {
-          // 核心层 - 非常密集，小粒子
-          distFromCenter = Math.abs((Math.random() + Math.random()) / 2 - 0.5) * 1.5;
-          sizeMultiplier = 0.6;
-          alphaMultiplier = 1.0;
-        } else if (layerRandom < 0.7) {
-          // 中间层 - 适中密度
-          distFromCenter = 1.0 + Math.random() * 2.5;
-          sizeMultiplier = 0.8;
-          alphaMultiplier = 0.85;
-        } else if (layerRandom < 0.9) {
-          // 外层 - 稀疏，形成柔和边缘
-          distFromCenter = 2.5 + Math.random() * 3.0;
-          sizeMultiplier = 1.0;
-          alphaMultiplier = 0.6;
-        } else {
-          // 最外层 - 非常稀疏，形成雾化效果
-          distFromCenter = 4.0 + Math.random() * 4.0;
-          sizeMultiplier = 1.3;
-          alphaMultiplier = 0.3;
+      // 在内部：全部接受
+      // 在外部：距离越远，接受概率越低（形成柔和边缘）
+      let acceptParticle = false;
+      let edgeFactor = 1; // 边缘因子，用于调整大小和透明度
+      
+      if (isInside) {
+        acceptParticle = true;
+        // 内部靠近边缘的粒子也稍微柔和
+        edgeFactor = Math.min(1, edgeDist / edgeSoftness);
+      } else {
+        // 外部粒子，根据距离概率接受
+        const outsideProb = Math.exp(-edgeDist / 3); // 距离越远概率越低
+        if (Math.random() < outsideProb) {
+          acceptParticle = true;
+          edgeFactor = Math.max(0.1, 1 - edgeDist / edgeSoftness);
         }
+      }
+      
+      if (acceptParticle) {
+        // 添加深度变化 - 让闪电有立体厚度感
+        // 使用高斯分布让中间更密集，边缘更稀疏
+        const zRandom = (Math.random() + Math.random() + Math.random()) / 3; // 趋向中间
+        const z = (zRandom - 0.5) * 16; // 增加厚度到16单位
         
-        // 随机角度分布
-        const angle = Math.random() * Math.PI * 2;
-        const offsetX = Math.cos(angle) * distFromCenter;
-        const offsetY = Math.sin(angle) * distFromCenter * 0.4; // Y方向压缩
-        const offsetZ = (Math.random() - 0.5) * distFromCenter * 0.8;
+        // 目标位置
+        targetPositions[idx * 3] = x;
+        targetPositions[idx * 3 + 1] = y;
+        targetPositions[idx * 3 + 2] = z;
         
-        // 应用偏移
-        targetPositions[idx * 3] = basePos.x + perpX.x * offsetX + offsetY * 0.3;
-        targetPositions[idx * 3 + 1] = basePos.y + offsetY;
-        targetPositions[idx * 3 + 2] = basePos.z + offsetZ;
-        
-        // 噪声种子 - 用于波动效果
+        // 噪声种子
         noiseSeeds[idx * 2] = Math.random() * 100;
         noiseSeeds[idx * 2 + 1] = Math.random() * 100;
         
@@ -2222,35 +2237,69 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         positions[idx * 3 + 2] = dispersePositions[idx * 3 + 2];
         
         // 根据Y位置计算颜色渐变
-        const yNorm = (basePos.y - minY) / (maxY - minY); // 0=底部, 1=顶部
+        const yNorm = (y - bounds.minY) / (bounds.maxY - bounds.minY);
         let particleColor: THREE.Color;
         
-        if (layerRandom < 0.25) {
-          // 核心始终是白色
+        // 随机决定是否为核心白色
+        const isCore = Math.random() < 0.3;
+        
+        if (isCore) {
           particleColor = coreColor.clone();
         } else if (yNorm > 0.6) {
           // 顶部 - 青色
-          particleColor = topColor.clone().lerp(coreColor, 0.3);
+          particleColor = topColor.clone().lerp(coreColor, 0.2);
         } else if (yNorm > 0.3) {
           // 中间 - 淡紫粉
-          particleColor = midColor.clone().lerp(topColor, (yNorm - 0.3) / 0.3);
+          const t = (yNorm - 0.3) / 0.3;
+          particleColor = midColor.clone().lerp(topColor, t);
         } else {
           // 底部 - 橙色
-          particleColor = bottomColor.clone().lerp(midColor, yNorm / 0.3);
+          const t = yNorm / 0.3;
+          particleColor = bottomColor.clone().lerp(midColor, t);
         }
+        
+        // 根据Z位置调整颜色亮度 - 后面的粒子更暗，增加立体感
+        const zDepthFactor = 0.6 + ((z + 8) / 16) * 0.4; // 后面0.6，前面1.0
+        particleColor.multiplyScalar(zDepthFactor);
         
         colors[idx * 3] = particleColor.r;
         colors[idx * 3 + 1] = particleColor.g;
         colors[idx * 3 + 2] = particleColor.b;
         
-        // 粒子大小 - 小而密集
-        sizes[idx] = (1.0 + Math.random() * 1.2) * sizeMultiplier;
+        // 粒子大小 - 根据Z位置和边缘距离调整
+        const zNorm = (z + 8) / 16; // 归一化到0-1
+        const depthSize = 0.6 + zNorm * 0.8; // 后面0.6，前面1.4
+        // 边缘的粒子更小
+        sizes[idx] = (0.8 + Math.random() * 1.0) * depthSize * (0.4 + edgeFactor * 0.6);
         
-        // 随机值（包含alpha信息）
-        randoms[idx] = alphaMultiplier;
+        // 随机值 - 根据Z和边缘调整亮度
+        const depthBrightness = 0.5 + zNorm * 0.5; // 后面0.5，前面1.0
+        // 边缘的粒子更透明
+        randoms[idx] = (0.7 + Math.random() * 0.3) * depthBrightness * (0.3 + edgeFactor * 0.7);
         
         idx++;
       }
+    }
+    
+    // 填充剩余位置（如果有）
+    while (idx < particleCount) {
+      targetPositions[idx * 3] = 0;
+      targetPositions[idx * 3 + 1] = 0;
+      targetPositions[idx * 3 + 2] = 0;
+      dispersePositions[idx * 3] = (Math.random() - 0.5) * 600;
+      dispersePositions[idx * 3 + 1] = (Math.random() - 0.5) * 600;
+      dispersePositions[idx * 3 + 2] = (Math.random() - 0.5) * 600;
+      positions[idx * 3] = dispersePositions[idx * 3];
+      positions[idx * 3 + 1] = dispersePositions[idx * 3 + 1];
+      positions[idx * 3 + 2] = dispersePositions[idx * 3 + 2];
+      colors[idx * 3] = 1;
+      colors[idx * 3 + 1] = 1;
+      colors[idx * 3 + 2] = 1;
+      sizes[idx] = 0;
+      randoms[idx] = 0;
+      noiseSeeds[idx * 2] = 0;
+      noiseSeeds[idx * 2 + 1] = 0;
+      idx++;
     }
     
     return { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds };
@@ -2321,10 +2370,10 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           float flicker = 0.9 + sin(uTime * 4.0 + aNoiseSeed.x) * 0.1 * t;
           
           // aRandom 存储了 alphaMultiplier - 提高整体亮度
-          vAlpha = mix(0.4, 1.0, t) * flicker * (aRandom * 0.5 + 0.5);
+          vAlpha = mix(0.5, 1.2, t) * flicker * (aRandom * 0.4 + 0.6);
           
           vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-          gl_PointSize = aSize * (1.0 + t * 0.2) * (300.0 / -mvPosition.z);
+          gl_PointSize = aSize * (1.0 + t * 0.3) * (350.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -2338,13 +2387,13 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           
           // 更亮的发光效果
           float glow = 1.0 - r * 2.0;
-          glow = pow(glow, 0.35); // 更亮的衰减
+          glow = pow(glow, 0.3); // 更亮的衰减
           
           // 强化的光晕
-          float softGlow = exp(-r * 1.0);
+          float softGlow = exp(-r * 0.8);
           
-          vec3 finalColor = vColor * (1.8 + softGlow * 1.0);
-          float finalAlpha = vAlpha * glow * 2.0;
+          vec3 finalColor = vColor * (2.2 + softGlow * 1.2);
+          float finalAlpha = vAlpha * glow * 2.5;
           
           gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
         }
@@ -5239,7 +5288,7 @@ const Experience = ({
       {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
       <BoltGlow state={sceneState} />
       {/* <LightningSparks state={sceneState} /> */}
-      <BoltFill state={sceneState} />
+      {/* <BoltFill state={sceneState} /> - 已合并到 BoltGlow 中 */}
       {/* TopStar 已移除 - 去掉顶部大光球 */}
       
       <group ref={sceneGroupRef} position={[0, 0, 0]}>
