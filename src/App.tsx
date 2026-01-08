@@ -10,7 +10,8 @@ import {
   Stars,
   Sparkles,
   Html,
-  useTexture
+  useTexture,
+  Text
 } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -2335,15 +2336,15 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           float r = distance(gl_PointCoord, vec2(0.5));
           if (r > 0.5) discard;
           
-          // 柔和但明亮的发光效果
+          // 更亮的发光效果
           float glow = 1.0 - r * 2.0;
-          glow = pow(glow, 0.6); // 更亮的衰减
+          glow = pow(glow, 0.35); // 更亮的衰减
           
           // 强化的光晕
-          float softGlow = exp(-r * 2.0);
+          float softGlow = exp(-r * 1.0);
           
-          vec3 finalColor = vColor * (1.1 + softGlow * 0.5);
-          float finalAlpha = vAlpha * glow * 1.2;
+          vec3 finalColor = vColor * (1.8 + softGlow * 1.0);
+          float finalAlpha = vAlpha * glow * 2.0;
           
           gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
         }
@@ -5148,12 +5149,13 @@ const Experience = ({
       {sceneState === 'CHAOS' && <ShaderStarField count={10000} />}
       
       {/* 雾效 - CHAOS状态下减弱，避免遮挡银河 */}
-      <fog attach="fog" args={[sceneState === 'CHAOS' ? '#000005' : '#0a0520', sceneState === 'CHAOS' ? 800 : 400, sceneState === 'CHAOS' ? 2000 : 1500]} />
+      <fog attach="fog" args={[sceneState === 'CHAOS' ? '#000005' : '#0a0520', sceneState === 'CHAOS' ? 800 : 500, sceneState === 'CHAOS' ? 2000 : 1800]} />
       
-      {/* 静态星空背景 - 减少数量避免性能问题 */}
-      <Stars radius={400} depth={200} count={sceneState === 'CHAOS' ? 5000 : 8000} factor={8} saturation={0.4} fade speed={0.15} />
-      <Stars radius={700} depth={350} count={sceneState === 'CHAOS' ? 3000 : 5000} factor={10} saturation={0.35} fade speed={0.1} />
-      <Stars radius={1000} depth={450} count={sceneState === 'CHAOS' ? 2000 : 3000} factor={12} saturation={0.3} fade speed={0.08} />
+      {/* 静态星空背景 - 增加星辰数量 */}
+      <Stars radius={300} depth={150} count={sceneState === 'CHAOS' ? 4000 : 10000} factor={6} saturation={0.5} fade speed={0.2} />
+      <Stars radius={500} depth={250} count={sceneState === 'CHAOS' ? 5000 : 12000} factor={8} saturation={0.4} fade speed={0.15} />
+      <Stars radius={700} depth={350} count={sceneState === 'CHAOS' ? 3000 : 8000} factor={10} saturation={0.35} fade speed={0.1} />
+      <Stars radius={1000} depth={450} count={sceneState === 'CHAOS' ? 2000 : 5000} factor={12} saturation={0.3} fade speed={0.08} />
       
       {/* 远景微弱星星 - 只在CHAOS状态显示，减少数量 */}
       {sceneState === 'CHAOS' && (
@@ -5236,7 +5238,7 @@ const Experience = ({
       
       {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
       <BoltGlow state={sceneState} />
-      <LightningSparks state={sceneState} />
+      {/* <LightningSparks state={sceneState} /> */}
       <BoltFill state={sceneState} />
       {/* TopStar 已移除 - 去掉顶部大光球 */}
       
@@ -5633,6 +5635,25 @@ export default function GrandTreeApp() {
 
       {/* UI - AI Status */}
       <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
+        {/* Happy New Year - 花体字 - 只在FORMED状态显示 */}
+        <div style={{ 
+          fontFamily: "'Great Vibes', 'Dancing Script', 'Pacifico', cursive",
+          fontSize: '56px', 
+          fontWeight: 400,
+          background: 'linear-gradient(135deg, #22D3EE, #FFFFFF, #3B82F6, #FFFFFF, #22D3EE)',
+          backgroundSize: '200% 200%',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+          filter: 'drop-shadow(0 0 20px rgba(6, 182, 212, 0.8)) drop-shadow(0 0 40px rgba(59, 130, 246, 0.4))',
+          userSelect: 'none',
+          animation: 'shimmer 3s ease-in-out infinite',
+          opacity: sceneState === 'FORMED' ? 1 : 0,
+          transition: 'opacity 0.3s ease-out',
+        }}>
+          Happy New Year
+        </div>
+        {/* 光子工作室文字 - 已注释
         <div style={{ 
           fontSize: '22px', 
           letterSpacing: '3px', 
@@ -5659,6 +5680,7 @@ export default function GrandTreeApp() {
         }}>
           感谢每一个闪闪发光的你
         </div>
+        */}
         <div style={{ color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(0, 240, 255, 0.5)', fontSize: '10px', letterSpacing: '2px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
           {aiStatus}
         </div>
