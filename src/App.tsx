@@ -165,6 +165,7 @@ const lightningPath = (() => {
   const svgCenter = { x: 55, y: 71 }; // approximate centroid of the logo path
   const svgHeight = 138;              // max span after centering (from 69 to -69)
   const scale = CONFIG.tree.height / svgHeight;
+  const widthScale = 1.2; // 让闪电变胖，X方向放大1.2倍
 
   const svgPoints = [
     { x: 68, y: 2 },
@@ -176,7 +177,7 @@ const lightningPath = (() => {
   ];
 
   return svgPoints.map((p) => {
-    const x = (p.x - svgCenter.x) * scale;
+    const x = (p.x - svgCenter.x) * scale * widthScale; // X方向放大
     const y = (svgCenter.y - p.y) * scale; // invert so higher y is up in 3D space
     return new THREE.Vector3(x, y, 0);
   });
@@ -1971,6 +1972,8 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const count = state === 'FORMED' ? CONFIG.counts.lightsFormed : CONFIG.counts.lightsChaos;
   const groupRef = useRef<THREE.Group>(null);
   const geometry = useMemo(() => new THREE.SphereGeometry(0.8, 8, 8), []);
+  const stateChangeTimeRef = useRef(0);
+  const prevStateRef = useRef(state);
 
   const data = useMemo(() => {
     return new Array(count).fill(0).map(() => {
@@ -1990,6 +1993,18 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     if (!groupRef.current) return;
     const isFormed = state === 'FORMED';
     const time = stateObj.clock.elapsedTime;
+    
+    // 检测状态变化
+    if (state !== prevStateRef.current) {
+      prevStateRef.current = state;
+      stateChangeTimeRef.current = time;
+    }
+    
+    // 延迟出现逻辑 - 等待闪电粒子汇聚完成后再显示
+    const delayDuration = 1.2;
+    const timeSinceChange = time - stateChangeTimeRef.current;
+    const delayProgress = isFormed ? Math.min(1, Math.max(0, (timeSinceChange - delayDuration) / 0.5)) : 0;
+    
     groupRef.current.children.forEach((child, i) => {
       const objData = data[i];
       const target = isFormed ? objData.targetPos : objData.chaosPos;
@@ -1997,7 +2012,9 @@ const FairyLights = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       const mesh = child as THREE.Mesh;
       mesh.position.copy(objData.currentPos);
       const intensity = (Math.sin(time * objData.speed + objData.timeOffset) + 1) / 2;
-      if (mesh.material) { (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = isFormed ? 3 + intensity * 4 : 0; }
+      if (mesh.material) { 
+        (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = isFormed ? (3 + intensity * 4) * delayProgress : 0; 
+      }
     });
   });
 
@@ -2082,224 +2099,287 @@ const FlameParticle = ({
   );
 };
 
-// --- Component: Bolt Glow (火焰能量边缘效果) ---
+// --- Component: Bolt Glow (火焰能量边缘效果 - 柔和波动粒子风格) ---
 const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const pointsRef = useRef<THREE.Points>(null);
   const timeRef = useRef(0);
+  const progressRef = useRef(state === 'FORMED' ? 1 : 0);
   
-  // 火焰颜色渐变 - 蓝色系：核心白 -> 青蓝 -> 深蓝 -> 紫蓝
-  const flameColors = useMemo(() => [
-    new THREE.Color('#FFFFFF'),  // 核心白
-    new THREE.Color('#E0F4FF'),  // 冰白
-    new THREE.Color('#00FFFF'),  // 青色
-    new THREE.Color('#00BFFF'),  // 深天蓝
-    new THREE.Color('#1E90FF'),  // 道奇蓝
-    new THREE.Color('#4169E1'),  // 皇家蓝
-    new THREE.Color('#6A5ACD'),  // 石板蓝
-    new THREE.Color('#7B68EE'),  // 中石板蓝
-    new THREE.Color('#9370DB'),  // 中紫
-  ], []);
-  
-  // 生成火焰粒子数据
-  const flameParticles = useMemo(() => {
-    const particles: {
-      startPos: THREE.Vector3;
-      endPos: THREE.Vector3;
-      delay: number;
-      speed: number;
-      color: THREE.Color;
-      size: number;
-      layer: number;
-    }[] = [];
+  // 生成轮廓粒子数据 - 柔和波动风格
+  const { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds } = useMemo(() => {
+    const particleCount = 18000; // 更多粒子让边缘更柔和密集
+    const positions = new Float32Array(particleCount * 3);
+    const targetPositions = new Float32Array(particleCount * 3);
+    const dispersePositions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const randoms = new Float32Array(particleCount);
+    const noiseSeeds = new Float32Array(particleCount * 2); // 用于波动的噪声种子
     
-    // 沿闪电路径生成多层火焰粒子
+    // 颜色渐变 - 参考图的青白到橙色渐变
+    const topColor = new THREE.Color('#80E0FF');    // 顶部青色
+    const midColor = new THREE.Color('#E0B0FF');    // 中间淡紫粉
+    const bottomColor = new THREE.Color('#FFB060'); // 底部橙色
+    const coreColor = new THREE.Color('#FFFFFF');   // 核心白色
+    
+    // 先计算所有线段的总长度和累计长度
+    let totalLength = 0;
+    const segmentLengths: number[] = [];
+    const cumulativeLengths: number[] = [0];
     for (let segIdx = 0; segIdx < lightningPath.length; segIdx++) {
       const curr = lightningPath[segIdx];
       const next = lightningPath[(segIdx + 1) % lightningPath.length];
+      const len = curr.distanceTo(next);
+      segmentLengths.push(len);
+      totalLength += len;
+      cumulativeLengths.push(totalLength);
+    }
+    
+    // 获取闪电的Y范围用于颜色渐变
+    let minY = Infinity, maxY = -Infinity;
+    lightningPath.forEach(p => {
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    });
+    
+    let idx = 0;
+    
+    // 根据线段长度比例分配粒子
+    for (let segIdx = 0; segIdx < lightningPath.length && idx < particleCount; segIdx++) {
+      const curr = lightningPath[segIdx];
+      const next = lightningPath[(segIdx + 1) % lightningPath.length];
+      const segmentLength = segmentLengths[segIdx];
       
-      // 每段生成多个粒子
-      const particlesPerSegment = 25;
+      const particlesForSegment = Math.floor((segmentLength / totalLength) * particleCount);
       
-      for (let p = 0; p < particlesPerSegment; p++) {
-        // 多层火焰效果
-        const layers = 5;
-        for (let layer = 0; layer < layers; layer++) {
-          const layerOffset = layer * 0.8; // 层间距离
-          const t = p / particlesPerSegment;
-          
-          // 基础位置
-          const baseStart = new THREE.Vector3().lerpVectors(curr, next, t);
-          const baseEnd = new THREE.Vector3().lerpVectors(curr, next, Math.min(1, t + 0.15));
-          
-          // 添加层偏移和随机性 - 火焰向外扩散
-          const perpX = (Math.random() - 0.5) * (2 + layer * 1.5);
-          const perpY = (Math.random() - 0.5) * (1 + layer * 0.8);
-          const perpZ = (Math.random() - 0.5) * (2 + layer * 1.2);
-          
-          const startPos = baseStart.clone().add(new THREE.Vector3(perpX, perpY, perpZ));
-          const endPos = baseEnd.clone().add(new THREE.Vector3(
-            perpX + (Math.random() - 0.5) * 2,
-            perpY + (Math.random() - 0.5) * 1.5,
-            perpZ + (Math.random() - 0.5) * 1.5
-          ));
-          
-          // 颜色 - 内层更亮，外层更紫
-          const colorIndex = Math.min(flameColors.length - 1, layer + Math.floor(Math.random() * 2));
-          const color = flameColors[colorIndex].clone();
-          
-          // 大小 - 内层小而亮，外层大而淡
-          const size = layer === 0 ? 0.3 + Math.random() * 0.4 : 
-                       layer === 1 ? 0.5 + Math.random() * 0.6 :
-                       layer === 2 ? 0.8 + Math.random() * 0.8 :
-                       1.0 + Math.random() * 1.2;
-          
-          particles.push({
-            startPos,
-            endPos,
-            delay: Math.random(),
-            speed: 0.3 + Math.random() * 0.4,
-            color,
-            size,
-            layer
-          });
+      // 计算线段方向和法向量
+      const segDir = new THREE.Vector3().subVectors(next, curr).normalize();
+      const perpX = new THREE.Vector3(-segDir.y, segDir.x, 0).normalize();
+      const perpZ = new THREE.Vector3(0, 0, 1);
+      
+      for (let p = 0; p < particlesForSegment && idx < particleCount; p++) {
+        const t = p / particlesForSegment;
+        
+        // 基础位置
+        const basePos = new THREE.Vector3().lerpVectors(curr, next, t);
+        
+        // 柔和的边缘分布 - 使用多层高斯分布
+        const layerRandom = Math.random();
+        let distFromCenter: number;
+        let sizeMultiplier: number;
+        let alphaMultiplier: number;
+        
+        if (layerRandom < 0.35) {
+          // 核心层 - 非常密集，小粒子
+          distFromCenter = Math.abs((Math.random() + Math.random()) / 2 - 0.5) * 1.5;
+          sizeMultiplier = 0.6;
+          alphaMultiplier = 1.0;
+        } else if (layerRandom < 0.7) {
+          // 中间层 - 适中密度
+          distFromCenter = 1.0 + Math.random() * 2.5;
+          sizeMultiplier = 0.8;
+          alphaMultiplier = 0.85;
+        } else if (layerRandom < 0.9) {
+          // 外层 - 稀疏，形成柔和边缘
+          distFromCenter = 2.5 + Math.random() * 3.0;
+          sizeMultiplier = 1.0;
+          alphaMultiplier = 0.6;
+        } else {
+          // 最外层 - 非常稀疏，形成雾化效果
+          distFromCenter = 4.0 + Math.random() * 4.0;
+          sizeMultiplier = 1.3;
+          alphaMultiplier = 0.3;
         }
+        
+        // 随机角度分布
+        const angle = Math.random() * Math.PI * 2;
+        const offsetX = Math.cos(angle) * distFromCenter;
+        const offsetY = Math.sin(angle) * distFromCenter * 0.4; // Y方向压缩
+        const offsetZ = (Math.random() - 0.5) * distFromCenter * 0.8;
+        
+        // 应用偏移
+        targetPositions[idx * 3] = basePos.x + perpX.x * offsetX + offsetY * 0.3;
+        targetPositions[idx * 3 + 1] = basePos.y + offsetY;
+        targetPositions[idx * 3 + 2] = basePos.z + offsetZ;
+        
+        // 噪声种子 - 用于波动效果
+        noiseSeeds[idx * 2] = Math.random() * 100;
+        noiseSeeds[idx * 2 + 1] = Math.random() * 100;
+        
+        // 散开位置
+        const disperseRadius = 300 + Math.random() * 400;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        dispersePositions[idx * 3] = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+        dispersePositions[idx * 3 + 1] = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+        dispersePositions[idx * 3 + 2] = Math.cos(phi) * disperseRadius;
+        
+        // 初始位置 = 散开位置
+        positions[idx * 3] = dispersePositions[idx * 3];
+        positions[idx * 3 + 1] = dispersePositions[idx * 3 + 1];
+        positions[idx * 3 + 2] = dispersePositions[idx * 3 + 2];
+        
+        // 根据Y位置计算颜色渐变
+        const yNorm = (basePos.y - minY) / (maxY - minY); // 0=底部, 1=顶部
+        let particleColor: THREE.Color;
+        
+        if (layerRandom < 0.25) {
+          // 核心始终是白色
+          particleColor = coreColor.clone();
+        } else if (yNorm > 0.6) {
+          // 顶部 - 青色
+          particleColor = topColor.clone().lerp(coreColor, 0.3);
+        } else if (yNorm > 0.3) {
+          // 中间 - 淡紫粉
+          particleColor = midColor.clone().lerp(topColor, (yNorm - 0.3) / 0.3);
+        } else {
+          // 底部 - 橙色
+          particleColor = bottomColor.clone().lerp(midColor, yNorm / 0.3);
+        }
+        
+        colors[idx * 3] = particleColor.r;
+        colors[idx * 3 + 1] = particleColor.g;
+        colors[idx * 3 + 2] = particleColor.b;
+        
+        // 粒子大小 - 小而密集
+        sizes[idx] = (1.0 + Math.random() * 1.2) * sizeMultiplier;
+        
+        // 随机值（包含alpha信息）
+        randoms[idx] = alphaMultiplier;
+        
+        idx++;
       }
     }
     
-    return particles;
-  }, [flameColors]);
-  
-  // 创建火焰光晕管道 - 只保留核心粗线条
-  const glowTubes = useMemo(() => {
-    const tubes: { geometry: THREE.TubeGeometry; color: string; opacity: number }[] = [];
-    
-    for (let segIdx = 0; segIdx < lightningPath.length; segIdx++) {
-      const curr = lightningPath[segIdx];
-      const next = lightningPath[(segIdx + 1) % lightningPath.length];
-      
-      // 直线路径 - 只用起点和终点，不添加任何抖动
-      const curve = new THREE.LineCurve3(curr.clone(), next.clone());
-      
-      // 只保留核心线条，带蓝色调
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 0.5, 8, false), color: '#A0E0FF', opacity: 0.95 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve, 2, 1.2, 8, false), color: '#00CFFF', opacity: 0.6 });
-    }
-    
-    return tubes;
+    return { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds };
   }, []);
   
-  // 在每个折角点添加短管道覆盖，填补断裂（保持锋利感）
-  const cornerTubes = useMemo(() => {
-    const tubes: { geometry: THREE.TubeGeometry; color: string; opacity: number }[] = [];
-    
-    // 为每个顶点创建连接前后线段的短管道
-    for (let i = 0; i < lightningPath.length; i++) {
-      const curr = lightningPath[i];
-      const prev = lightningPath[(i - 1 + lightningPath.length) % lightningPath.length];
-      const next = lightningPath[(i + 1) % lightningPath.length];
-      
-      // 从前一段末端延伸一小段到当前点
-      const toPrev = prev.clone().sub(curr).normalize();
-      const toNext = next.clone().sub(curr).normalize();
-      
-      // 创建两个短管道：从当前点向前后各延伸一小段
-      const extendDist = 3; // 延伸距离
-      const startPrev = curr.clone().add(toPrev.clone().multiplyScalar(extendDist));
-      const startNext = curr.clone().add(toNext.clone().multiplyScalar(extendDist));
-      
-      // 短管道1：从前一段方向到当前点
-      const curve1 = new THREE.LineCurve3(startPrev, curr.clone());
-      // 短管道2：从当前点到下一段方向
-      const curve2 = new THREE.LineCurve3(curr.clone(), startNext);
-      
-      // 只保留核心线条，带蓝色调
-      tubes.push({ geometry: new THREE.TubeGeometry(curve1, 2, 0.6, 8, false), color: '#A0E0FF', opacity: 0.95 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve1, 2, 1.4, 8, false), color: '#00CFFF', opacity: 0.6 });
-      
-      tubes.push({ geometry: new THREE.TubeGeometry(curve2, 2, 0.6, 8, false), color: '#A0E0FF', opacity: 0.95 });
-      tubes.push({ geometry: new THREE.TubeGeometry(curve2, 2, 1.4, 8, false), color: '#00CFFF', opacity: 0.6 });
-    }
-    
-    return tubes;
+  // 着色器材质 - 柔和波动效果
+  const shaderMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+      },
+      vertexShader: `
+        attribute vec3 aTargetPos;
+        attribute vec3 aDispersePos;
+        attribute vec2 aNoiseSeed;
+        attribute float aSize;
+        attribute float aRandom;
+        
+        uniform float uTime;
+        uniform float uProgress;
+        
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        // 简单噪声函数
+        float noise(float x) {
+          return fract(sin(x * 12.9898) * 43758.5453);
+        }
+        
+        float smoothNoise(float x) {
+          float i = floor(x);
+          float f = fract(x);
+          return mix(noise(i), noise(i + 1.0), f * f * (3.0 - 2.0 * f));
+        }
+        
+        float cubicInOut(float t) {
+          return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
+        }
+        
+        void main() {
+          vColor = color;
+          
+          float t = cubicInOut(uProgress);
+          
+          // 在聚合和散开位置之间插值
+          vec3 finalPos = mix(aDispersePos, aTargetPos, t);
+          
+          // 柔和的波动效果 - 让边缘有流动感
+          float waveSpeed = 0.8;
+          float waveAmount = t * 2.0;
+          
+          // 多层波动叠加，产生自然的流体感
+          float wave1 = sin(uTime * waveSpeed + aNoiseSeed.x) * 0.8;
+          float wave2 = sin(uTime * waveSpeed * 1.3 + aNoiseSeed.y) * 0.5;
+          float wave3 = sin(uTime * waveSpeed * 0.7 + aNoiseSeed.x * 0.5) * 0.3;
+          
+          finalPos.x += (wave1 + wave2) * waveAmount;
+          finalPos.y += (wave2 + wave3) * waveAmount * 0.6;
+          finalPos.z += wave3 * waveAmount;
+          
+          // 散开时的飘动
+          float wobble = sin(uTime * 2.0 + aNoiseSeed.x * 0.1) * (1.0 - t) * 3.0;
+          finalPos.x += wobble;
+          finalPos.y += cos(uTime * 1.5 + aNoiseSeed.y * 0.1) * (1.0 - t) * 2.0;
+          
+          // 柔和的闪烁
+          float flicker = 0.9 + sin(uTime * 4.0 + aNoiseSeed.x) * 0.1 * t;
+          
+          // aRandom 存储了 alphaMultiplier - 提高整体亮度
+          vAlpha = mix(0.4, 1.0, t) * flicker * (aRandom * 0.5 + 0.5);
+          
+          vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+          gl_PointSize = aSize * (1.0 + t * 0.2) * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        void main() {
+          float r = distance(gl_PointCoord, vec2(0.5));
+          if (r > 0.5) discard;
+          
+          // 柔和但明亮的发光效果
+          float glow = 1.0 - r * 2.0;
+          glow = pow(glow, 0.6); // 更亮的衰减
+          
+          // 强化的光晕
+          float softGlow = exp(-r * 2.0);
+          
+          vec3 finalColor = vColor * (1.1 + softGlow * 0.5);
+          float finalAlpha = vAlpha * glow * 1.2;
+          
+          gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      vertexColors: true,
+    });
   }, []);
   
-  // 折角管道材质
-  const cornerTubeMaterials = useMemo(() => {
-    return cornerTubes.map(({ color }) => {
-      return new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-    });
-  }, [cornerTubes]);
-  
-  // 管道材质
-  const tubeMaterials = useMemo(() => {
-    return glowTubes.map(({ color, opacity }) => {
-      return new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-    });
-  }, [glowTubes]);
-
   useFrame((stateObj, delta) => {
-    if (!groupRef.current) return;
-    const isFormed = state === 'FORMED';
     timeRef.current = stateObj.clock.elapsedTime;
+    const isFormed = state === 'FORMED';
+    const targetProgress = isFormed ? 1 : 0;
     
-    // 更新管道辉光 - 加快消散
-    tubeMaterials.forEach((mat, i) => {
-      const baseOpacity = glowTubes[i].opacity;
-      const pulse = 0.85 + Math.sin(timeRef.current * 3 + i * 0.5) * 0.15;
-      const flicker = 0.9 + Math.random() * 0.1; // 火焰闪烁
-      const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
-      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 12, delta);
-    });
+    // 平滑过渡
+    progressRef.current = MathUtils.damp(progressRef.current, targetProgress, 3, delta);
     
-    // 更新折角管道辉光 - 加快消散
-    cornerTubeMaterials.forEach((mat, i) => {
-      const baseOpacity = cornerTubes[i].opacity;
-      const pulse = 0.85 + Math.sin(timeRef.current * 3 + i * 0.3) * 0.15;
-      const flicker = 0.9 + Math.random() * 0.1;
-      const targetOpacity = isFormed ? baseOpacity * pulse * flicker : 0;
-      mat.opacity = MathUtils.damp(mat.opacity, targetOpacity, 12, delta);
-    });
+    shaderMaterial.uniforms.uTime.value = timeRef.current;
+    shaderMaterial.uniforms.uProgress.value = progressRef.current;
   });
-
+  
   return (
     <group ref={groupRef}>
-      {/* 背景辉光管道 */}
-      {glowTubes.map((tube, i) => (
-        <mesh key={`tube-${i}`} geometry={tube.geometry} material={tubeMaterials[i]} />
-      ))}
-      
-      {/* 折角管道覆盖 */}
-      {cornerTubes.map((tube, i) => (
-        <mesh key={`corner-${i}`} geometry={tube.geometry} material={cornerTubeMaterials[i]} />
-      ))}
-      
-      {/* 火焰粒子 */}
-      {flameParticles.map((particle, i) => (
-        <FlameParticle
-          key={`flame-${i}`}
-          startPos={particle.startPos}
-          endPos={particle.endPos}
-          delay={particle.delay}
-          speed={particle.speed}
-          color={particle.color}
-          size={particle.size}
-          state={state}
-        />
-      ))}
+      <points ref={pointsRef} material={shaderMaterial}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+          <bufferAttribute attach="attributes-aTargetPos" args={[targetPositions, 3]} />
+          <bufferAttribute attach="attributes-aDispersePos" args={[dispersePositions, 3]} />
+          <bufferAttribute attach="attributes-aNoiseSeed" args={[noiseSeeds, 2]} />
+          <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+          <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
+          <bufferAttribute attach="attributes-aRandom" args={[randoms, 1]} />
+        </bufferGeometry>
+      </points>
     </group>
   );
 };
@@ -2434,8 +2514,11 @@ const LightningAura = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const groupRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
+  const delayProgressRef = useRef(0); // 延迟出现的进度
+  const stateChangeTimeRef = useRef(0); // 状态变化时间
+  const prevStateRef = useRef(state);
   
-  // 生成电弧数据 - 增强霹雳效果
+  // 生成电弧数据 - 精致但有力度的边缘电弧
   const sparksData = useMemo(() => {
     const sparks: {
       tubeGeometry: THREE.TubeGeometry;
@@ -2443,93 +2526,101 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       flickerSpeed: number;
       flickerPhase: number;
       color: string;
-      isBranch: boolean; // 是否是分支电弧
+      isBranch: boolean;
     }[] = [];
     
-    // 沿闪电路径生成电弧 - 增加数量
+    // 沿闪电路径生成电弧 - 紧贴边缘
     for (let segIdx = 0; segIdx < lightningPath.length - 1; segIdx++) {
       const curr = lightningPath[segIdx];
       const next = lightningPath[segIdx + 1];
       
-      // 每段生成电弧 - 适中数量
-      const sparksPerSegment = 3 + Math.floor(Math.random() * 3);
+      // 每段生成少量电弧
+      const sparksPerSegment = 1 + Math.floor(Math.random() * 2);
       
       for (let s = 0; s < sparksPerSegment; s++) {
         const t = Math.random();
         const basePoint = new THREE.Vector3().lerpVectors(curr, next, t);
         
-        // 电弧方向 - 随机向外
-        const angle = Math.random() * Math.PI * 2;
-        const outwardDir = new THREE.Vector3(
-          Math.cos(angle),
-          (Math.random() - 0.5) * 0.5,
-          Math.sin(angle)
-        ).normalize();
+        // 计算闪电段的方向
+        const segmentDir = new THREE.Vector3().subVectors(next, curr).normalize();
         
-        // 生成不规则的电弧路径点 - 更长更锐利
-        const points: THREE.Vector3[] = [basePoint.clone()];
-        let currentPoint = basePoint.clone();
-        const segments = 3 + Math.floor(Math.random() * 4); // 更多段
-        const maxLength = 8 + Math.random() * 15; // 更长
+        // 电弧方向 - 垂直于闪电段向外
+        const angle = Math.random() * Math.PI * 2;
+        const perpendicular = new THREE.Vector3(
+          Math.cos(angle),
+          0,
+          Math.sin(angle)
+        );
+        perpendicular.sub(segmentDir.clone().multiplyScalar(perpendicular.dot(segmentDir))).normalize();
+        
+        // 起点紧贴闪电边缘
+        const edgeOffset = 1.2 + Math.random() * 0.5;
+        const startPoint = basePoint.clone().add(perpendicular.clone().multiplyScalar(edgeOffset));
+        
+        // 生成电弧路径点 - 适中长度，锐利转折
+        const points: THREE.Vector3[] = [startPoint.clone()];
+        let currentPoint = startPoint.clone();
+        const segments = 2 + Math.floor(Math.random() * 3); // 2-4段
+        const maxLength = 6 + Math.random() * 10; // 适中长度
         
         for (let i = 0; i < segments; i++) {
-          const segmentLength = maxLength / segments * (0.5 + Math.random() * 1.0);
-          // 更锐利的转折 - 增加抖动
+          const segmentLength = maxLength / segments * (0.6 + Math.random() * 0.8);
+          // 锐利但不过分的转折
           const jitter = new THREE.Vector3(
-            (Math.random() - 0.5) * 5,
             (Math.random() - 0.5) * 3,
-            (Math.random() - 0.5) * 5
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 3
           );
-          const direction = outwardDir.clone().add(jitter).normalize();
+          const direction = perpendicular.clone().add(jitter).normalize();
           currentPoint = currentPoint.clone().add(direction.multiplyScalar(segmentLength));
           points.push(currentPoint.clone());
         }
         
-        // 创建曲线和管道几何体 - 更粗
-        const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.05);
-        const tubeGeometry = new THREE.TubeGeometry(curve, 12, 0.2 + Math.random() * 0.15, 6, false);
+        // 创建曲线和管道几何体 - 精致但可见
+        const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.08);
+        const tubeGeometry = new THREE.TubeGeometry(curve, 10, 0.12 + Math.random() * 0.08, 5, false);
         
-        // 颜色变化 - 更亮的白色和青色
-        const colors = ['#FFFFFF', '#FFFFFF', '#F0FFFF', '#E0FFFF', '#00FFFF'];
+        // 颜色 - 淡青白色
+        const colors = ['#E0FFFF', '#F0FFFF', '#FFFFFF', '#C0E8FF'];
         const color = colors[Math.floor(Math.random() * colors.length)];
         
         sparks.push({
           tubeGeometry,
           baseOpacity: 0.7 + Math.random() * 0.3,
-          flickerSpeed: 15 + Math.random() * 25, // 更快闪烁
+          flickerSpeed: 12 + Math.random() * 18,
           flickerPhase: Math.random() * Math.PI * 2,
           color,
           isBranch: false
         });
         
-        // 添加分支电弧 - 从主电弧末端分叉
-        if (Math.random() > 0.5 && points.length > 2) {
-          const branchStart = points[Math.floor(points.length / 2)];
+        // 添加分支电弧
+        if (Math.random() > 0.6 && points.length > 1) {
+          const branchStart = points[1];
           const branchPoints: THREE.Vector3[] = [branchStart.clone()];
           let branchPoint = branchStart.clone();
-          const branchSegments = 2 + Math.floor(Math.random() * 2);
-          const branchLength = 4 + Math.random() * 8;
+          const branchSegments = 1 + Math.floor(Math.random() * 2);
+          const branchLength = 3 + Math.random() * 5;
           
           for (let b = 0; b < branchSegments; b++) {
             const branchJitter = new THREE.Vector3(
-              (Math.random() - 0.5) * 6,
-              (Math.random() - 0.5) * 4,
-              (Math.random() - 0.5) * 6
+              (Math.random() - 0.5) * 3,
+              (Math.random() - 0.5) * 2,
+              (Math.random() - 0.5) * 3
             );
             branchPoint = branchPoint.clone().add(branchJitter.normalize().multiplyScalar(branchLength / branchSegments));
             branchPoints.push(branchPoint.clone());
           }
           
           if (branchPoints.length >= 2) {
-            const branchCurve = new THREE.CatmullRomCurve3(branchPoints, false, 'catmullrom', 0.05);
-            const branchGeometry = new THREE.TubeGeometry(branchCurve, 8, 0.1 + Math.random() * 0.1, 4, false);
+            const branchCurve = new THREE.CatmullRomCurve3(branchPoints, false, 'catmullrom', 0.08);
+            const branchGeometry = new THREE.TubeGeometry(branchCurve, 8, 0.08 + Math.random() * 0.05, 4, false);
             
             sparks.push({
               tubeGeometry: branchGeometry,
               baseOpacity: 0.5 + Math.random() * 0.3,
-              flickerSpeed: 20 + Math.random() * 30,
+              flickerSpeed: 15 + Math.random() * 22,
               flickerPhase: Math.random() * Math.PI * 2,
-              color: '#00FFFF',
+              color: '#C0E8FF',
               isBranch: true
             });
           }
@@ -2559,23 +2650,42 @@ const LightningSparks = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     const isFormed = state === 'FORMED';
     timeRef.current = stateObj.clock.elapsedTime;
     
-    // 更新每个电弧的透明度 - 更强烈的闪烁效果
+    // 检测状态变化
+    if (state !== prevStateRef.current) {
+      prevStateRef.current = state;
+      stateChangeTimeRef.current = timeRef.current;
+      if (isFormed) {
+        delayProgressRef.current = 0; // 重置延迟进度
+      }
+    }
+    
+    // 延迟出现逻辑 - 等待闪电粒子汇聚完成后再显示
+    const delayDuration = 1.2; // 延迟1.2秒
+    if (isFormed) {
+      const timeSinceChange = timeRef.current - stateChangeTimeRef.current;
+      delayProgressRef.current = Math.min(1, Math.max(0, (timeSinceChange - delayDuration) / 0.5));
+    } else {
+      // 消失时立即开始消失
+      delayProgressRef.current = MathUtils.damp(delayProgressRef.current, 0, 8, delta);
+    }
+    
+    // 更新每个电弧的透明度
     materials.forEach((mat, i) => {
       const spark = sparksData[i];
       
-      // 更激烈的闪烁 - 多重频率叠加
+      // 闪烁效果
       const flicker1 = Math.sin(timeRef.current * spark.flickerSpeed + spark.flickerPhase);
       const flicker2 = Math.sin(timeRef.current * spark.flickerSpeed * 2.3 + spark.flickerPhase * 1.5);
       const flicker3 = Math.sin(timeRef.current * spark.flickerSpeed * 0.7 + spark.flickerPhase * 3);
       const combinedFlicker = (flicker1 + flicker2 * 0.5 + flicker3 * 0.3) / 1.8;
       
-      // 更频繁的出现 - 降低阈值
       const shouldShow = combinedFlicker > -0.1;
-      
-      // 分支电弧闪烁更快
       const intensityMult = spark.isBranch ? 1.2 : 1.0;
       
-      const targetOpacity = isFormed && shouldShow ? spark.baseOpacity * (0.5 + combinedFlicker * 0.5) * intensityMult : 0;
+      // 应用延迟进度
+      const targetOpacity = isFormed && shouldShow 
+        ? spark.baseOpacity * (0.5 + combinedFlicker * 0.5) * intensityMult * delayProgressRef.current 
+        : 0;
       mat.opacity = MathUtils.lerp(mat.opacity, targetOpacity, delta * 25);
     });
   });
@@ -4509,87 +4619,216 @@ const CosmicNebula = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
 
 // --- Component: Bolt Fill (闪电内部的宇宙星云) ---
 const BoltFill = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
-  const count = CONFIG.counts.fillDots;
+  const count = CONFIG.counts.fillDots * 3; // 增加粒子数量以填满闪电
   const groupRef = useRef<THREE.Points>(null);
 
-  const { positions, colors, sizes } = useMemo(() => {
+  // 辅助函数：检测点是否在闪电多边形内部
+  const isPointInLightning = (x: number, y: number): boolean => {
+    // 闪电形状由6个点组成，形成一个多边形
+    // 使用射线法检测点是否在多边形内
+    const polygon = lightningPath.map(p => ({ x: p.x, y: p.y }));
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+
+  // 获取闪电边界框
+  const getBounds = () => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    lightningPath.forEach(p => {
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    });
+    return { minX, maxX, minY, maxY };
+  };
+
+  const { positions, colors, sizes, randoms } = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     const siz = new Float32Array(count);
-    // 闪电中心镂空区域 - 扩大范围
-    const hollowRadius = 25;
-    const hollowHeight = 70;
-    for (let i = 0; i < count; i++) {
-      // 在闪电中心镂空区域内分布，模拟宇宙星云
-      // 使用高斯分布让中心更密集
-      const gaussX = (Math.random() + Math.random() + Math.random()) / 3 - 0.5;
-      const gaussY = (Math.random() + Math.random() + Math.random()) / 3 - 0.5;
-      const p = new THREE.Vector3(
-        gaussX * hollowRadius * 2,
-        gaussY * hollowHeight * 2,
-        (Math.random() - 0.5) * 20
-      );
-      pos[i * 3] = p.x;
-      pos[i * 3 + 1] = p.y;
-      pos[i * 3 + 2] = p.z;
+    const rnd = new Float32Array(count);
+    
+    const bounds = getBounds();
+    const padding = 2; // 边界内缩一点，避免太靠近边缘
+    
+    let idx = 0;
+    let attempts = 0;
+    const maxAttempts = count * 20;
+    
+    while (idx < count && attempts < maxAttempts) {
+      attempts++;
+      // 在边界框内随机生成点
+      const x = bounds.minX + padding + Math.random() * (bounds.maxX - bounds.minX - padding * 2);
+      const y = bounds.minY + padding + Math.random() * (bounds.maxY - bounds.minY - padding * 2);
       
-      // 宇宙星云渐变色 - 更丰富的颜色（去除粉色）
-      const tVal = Math.random();
-      const nebulaColors = [
-        new THREE.Color('#FFFFFF'),  // 白色星星
-        new THREE.Color('#87CEEB'),  // 天蓝
-        new THREE.Color('#DDA0DD'),  // 淡紫
-        new THREE.Color('#B0C4DE'),  // 淡钢蓝
-        new THREE.Color('#00CED1'),  // 青色
-        new THREE.Color('#9370DB'),  // 中紫
-        new THREE.Color('#4169E1'),  // 皇家蓝
-      ];
-      let tint;
-      if (tVal < 0.2) {
-        // 明亮的白色/蓝色星星
-        tint = nebulaColors[Math.floor(Math.random() * 2)].clone();
-      } else if (tVal < 0.5) {
-        // 星云色彩
-        tint = nebulaColors[2 + Math.floor(Math.random() * 3)].clone();
-        tint.multiplyScalar(0.7);
-      } else {
-        // 暗淡的背景星尘
-        tint = nebulaColors[5 + Math.floor(Math.random() * 2)].clone();
-        tint.multiplyScalar(0.4);
+      // 检测是否在闪电多边形内
+      if (isPointInLightning(x, y)) {
+        // 添加一些深度变化
+        const z = (Math.random() - 0.5) * 3;
+        
+        pos[idx * 3] = x;
+        pos[idx * 3 + 1] = y;
+        pos[idx * 3 + 2] = z;
+        
+        // 宇宙星云渐变色 - 根据位置决定颜色
+        const normalizedY = (y - bounds.minY) / (bounds.maxY - bounds.minY);
+        const tVal = Math.random();
+        
+        // 颜色与边框协调：顶部青色、中间紫粉、底部橙色
+        let tint: THREE.Color;
+        if (normalizedY > 0.7) {
+          // 顶部 - 青色/白色
+          if (tVal < 0.4) {
+            tint = new THREE.Color('#FFFFFF');
+          } else {
+            tint = new THREE.Color().lerpColors(
+              new THREE.Color('#00CED1'),
+              new THREE.Color('#87CEEB'),
+              Math.random()
+            );
+          }
+        } else if (normalizedY > 0.3) {
+          // 中间 - 紫粉色调
+          if (tVal < 0.3) {
+            tint = new THREE.Color('#FFFFFF');
+          } else {
+            tint = new THREE.Color().lerpColors(
+              new THREE.Color('#DDA0DD'),
+              new THREE.Color('#9370DB'),
+              Math.random()
+            );
+          }
+        } else {
+          // 底部 - 暖色调
+          if (tVal < 0.3) {
+            tint = new THREE.Color('#FFFFFF');
+          } else {
+            tint = new THREE.Color().lerpColors(
+              new THREE.Color('#FFA07A'),
+              new THREE.Color('#FFD700'),
+              Math.random()
+            );
+          }
+        }
+        
+        // 亮度调整
+        const brightness = 0.6 + Math.random() * 0.4;
+        tint.multiplyScalar(brightness);
+        
+        col[idx * 3] = tint.r;
+        col[idx * 3 + 1] = tint.g;
+        col[idx * 3 + 2] = tint.b;
+        
+        // 粒子大小 - 大部分小粒子，少量大粒子
+        if (tVal < 0.1) {
+          siz[idx] = 0.5 + Math.random() * 0.5; // 大星星
+        } else if (tVal < 0.3) {
+          siz[idx] = 0.3 + Math.random() * 0.2; // 中等
+        } else {
+          siz[idx] = 0.1 + Math.random() * 0.15; // 小粒子
+        }
+        
+        rnd[idx] = Math.random();
+        idx++;
       }
-      col[i * 3] = tint.r;
-      col[i * 3 + 1] = tint.g;
-      col[i * 3 + 2] = tint.b;
-      
-      // 不同大小的星星
-      siz[i] = tVal < 0.2 ? 0.4 + Math.random() * 0.4 : 0.15 + Math.random() * 0.2;
     }
-    return { positions: pos, colors: col, sizes: siz };
+    
+    // 如果没有生成足够的粒子，填充剩余的
+    while (idx < count) {
+      pos[idx * 3] = 0;
+      pos[idx * 3 + 1] = 0;
+      pos[idx * 3 + 2] = 0;
+      col[idx * 3] = 0;
+      col[idx * 3 + 1] = 0;
+      col[idx * 3 + 2] = 0;
+      siz[idx] = 0;
+      rnd[idx] = 0;
+      idx++;
+    }
+    
+    return { positions: pos, colors: col, sizes: siz, randoms: rnd };
   }, [count]);
+
+  // 自定义shader材质实现闪烁效果
+  const material = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0 },
+      },
+      vertexShader: `
+        attribute float aSize;
+        attribute float aRandom;
+        attribute vec3 color;
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uTime;
+        
+        void main() {
+          vColor = color;
+          
+          // 闪烁效果
+          float flicker = 0.7 + 0.3 * sin(uTime * 2.0 + aRandom * 20.0);
+          vAlpha = flicker * (0.5 + aRandom * 0.5);
+          
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (300.0 / -mvPosition.z) * flicker;
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        uniform float uOpacity;
+        
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          
+          // 柔和的圆形粒子
+          float glow = 1.0 - smoothstep(0.0, 0.5, dist);
+          glow = pow(glow, 1.5);
+          
+          vec3 finalColor = vColor * (1.0 + glow * 0.3);
+          float finalAlpha = vAlpha * glow * uOpacity;
+          
+          gl_FragColor = vec4(finalColor, finalAlpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+  }, []);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
-    const targetAlpha = state === 'FORMED' ? 0.5 : 0;
-    const mat = groupRef.current.material as THREE.PointsMaterial;
-    mat.opacity = MathUtils.damp(mat.opacity, targetAlpha, 4, delta);
+    const targetAlpha = state === 'FORMED' ? 0.8 : 0;
+    material.uniforms.uTime.value += delta;
+    material.uniforms.uOpacity.value = MathUtils.damp(
+      material.uniforms.uOpacity.value,
+      targetAlpha,
+      4,
+      delta
+    );
   });
 
   return (
-    <points ref={groupRef}>
+    <points ref={groupRef} material={material}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
+        <bufferAttribute attach="attributes-aRandom" args={[randoms, 1]} />
       </bufferGeometry>
-      <pointsMaterial
-        size={0.22}
-        transparent
-        depthWrite={false}
-        vertexColors
-        opacity={0}
-        blending={THREE.AdditiveBlending}
-        sizeAttenuation
-        toneMapped={false}
-      />
     </points>
   );
 };
@@ -5002,7 +5241,7 @@ const Experience = ({
       {/* TopStar 已移除 - 去掉顶部大光球 */}
       
       <group ref={sceneGroupRef} position={[0, 0, 0]}>
-        <Foliage state={sceneState} />
+        {/* Foliage 已移除 - 使用 BoltGlow 的统一白色粒子 */}
         <Suspense fallback={null}>
            <PlanetOrnaments
              state={sceneState}
