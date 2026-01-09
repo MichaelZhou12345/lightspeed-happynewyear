@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Diffuse Cosmic Lightning</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #010103; 
+            touch-action: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        /* 文字排版 */
+        .text-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            color: white;
+        }
+        
+        /* 右上角Logo */
+        .logo {
+            position: absolute;
+            top: 60px;
+            right: 60px;
+            width: clamp(100px, 12vw, 180px);
+            height: auto;
+            opacity: 0.95;
+            filter: drop-shadow(0 0 20px rgba(232, 183, 108, 0.3));
+        }
+        
+        /* 左上角主标题 */
+        .main-title {
+            position: absolute;
+            top: 60px;
+            left: 60px;
+            line-height: 1;
+        }
+        .main-title .big {
+            font-size: clamp(48px, 8vw, 120px);
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            margin: 0;
+            color: #ff3366;
+            text-shadow: 0 0 40px rgba(255, 51, 102, 0.6);
+        }
+        .main-title .sub {
+            font-size: clamp(20px, 3vw, 48px);
+            font-weight: 700;
+            margin: 10px 0 0 0;
+            color: #ff6699;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 20px rgba(255, 102, 153, 0.4);
+        }
+        
+        /* 左下角辅助文案 - 桌面端默认在左下角 */
+        .bottom-left {
+            position: absolute;
+            bottom: 60px;
+            left: 60px;
+            max-width: 400px;
+            font-size: clamp(12px, 1.2vw, 16px);
+            line-height: 1.8;
+            color: rgba(255, 255, 255, 0.5);
+            letter-spacing: 0.05em;
+        }
+        
+        /* 移动端时隐藏桌面版文案 */
+        @media (max-width: 768px) {
+            .bottom-left {
+                display: none;
+            }
+        }
+        
+        /* 右下角署名 */
+        .bottom-right {
+            position: absolute;
+            bottom: 60px;
+            right: 60px;
+            text-align: right;
+        }
+        .bottom-right .greeting {
+            font-size: clamp(24px, 4vw, 64px);
+            font-weight: 900;
+            color: #E8B76C;
+            margin: 0;
+            letter-spacing: 0.02em;
+            text-shadow: 0 0 30px rgba(232, 183, 108, 0.5);
+        }
+        .bottom-right .studio {
+            font-size: clamp(14px, 1.5vw, 20px);
+            font-weight: 700;
+            color: #E8B76C;
+            margin: 10px 0 5px 0;
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 15px rgba(232, 183, 108, 0.3);
+        }
+        .bottom-right .date {
+            font-size: clamp(10px, 1vw, 14px);
+            color: rgba(232, 183, 108, 0.6);
+            margin: 0;
+            letter-spacing: 0.15em;
+        }
+        
+        /* 移动端文案 - 默认隐藏 */
+        .mobile-text {
+            display: none;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            /* 主标题改为弹性布局，垂直排列 */
+            .main-title {
+                top: 20px;
+                left: 20px;
+                right: 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .main-title .big {
+                line-height: 1.1;
+            }
+            .main-title .sub {
+                margin: 8px 0 0 0;
+                line-height: 1.3;
+            }
+            
+            /* 移动端文案显示 */
+            .mobile-text {
+                display: block;
+                margin-top: 15px;
+                font-size: clamp(11px, 3vw, 14px);
+                line-height: 1.6;
+                color: rgba(255, 255, 255, 0.5);
+                letter-spacing: 0.05em;
+                max-width: calc(100vw - 100px); /* 右边留空给Logo */
+            }
+            
+            /* Logo缩小并调整位置 */
+            .logo {
+                top: 20px;
+                right: 20px;
+                width: clamp(60px, 20vw, 100px);
+            }
+            
+            /* 右下署名调整 */
+            .bottom-right {
+                bottom: 20px;
+                right: 20px;
+                left: 20px;
+                text-align: center;
+            }
+            .bottom-right .greeting {
+                font-size: clamp(20px, 6vw, 40px);
+            }
+            .bottom-right .studio {
+                font-size: clamp(12px, 3.5vw, 18px);
+            }
+            .bottom-right .date {
+                font-size: clamp(9px, 2.5vw, 12px);
+            }
+        }
+        
+        /* 极小屏幕优化 (小于480px) */
+        @media (max-width: 480px) {
+            .main-title {
+                top: 15px;
+                left: 15px;
+                right: 15px;
+            }
+            .main-title .big {
+                font-size: clamp(32px, 10vw, 60px);
+            }
+            .main-title .sub {
+                font-size: clamp(14px, 4vw, 24px);
+                margin-top: 5px;
+            }
+            
+            .mobile-text {
+                margin-top: 12px;
+                font-size: clamp(10px, 3.2vw, 13px);
+                max-width: calc(100vw - 80px);
+            }
+            
+            .logo {
+                top: 15px;
+                right: 15px;
+                width: clamp(50px, 18vw, 80px);
+            }
+            
+            .bottom-right {
+                bottom: 15px;
+                left: 15px;
+                right: 15px;
+            }
+            .bottom-right .greeting {
+                font-size: clamp(18px, 7vw, 36px);
+                line-height: 1.3;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+
+<!-- 文字排版层 -->
+<div class="text-overlay">
+    <!-- 右上角Logo -->
+    <img class="logo" src="光子工作室群标识组合金色版本_RGB_中文标志-竖版-金.png" alt="光子工作室">
+    
+    <!-- 左上角主标题 -->
+    <div class="main-title">
+        <h1 class="big">新年快乐</h1>
+        <p class="sub">HAPPY NEW YEAR 2026</p>
+        
+        <!-- 移动端文案 -->
+        <p class="mobile-text">
+            在这辞旧迎新的时刻，感谢每一位闪闪发光的你。愿新的一年，我们携手同行，继续创造无限可能。
+        </p>
+    </div>
+    
+    <!-- 桌面端左下角辅助文案 -->
+    <div class="bottom-left">
+        在这辞旧迎新的时刻，我们怀着感恩的心，感谢每一位闪闪发光的你。
+        是你们的热爱与支持，让我们的每一束光都能照亮更远的未来。
+        愿新的一年，我们携手同行，继续创造无限可能。
+    </div>
+    
+    <!-- 右下角署名 -->
+    <div class="bottom-right">
+        <p class="greeting">感谢每一个<br>闪闪发光的你</p>
+        <p class="studio">光子工作室</p>
+        <p class="date">2026.01.08</p>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x010103);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.z = 45;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio); 
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.rotateSpeed = 0.8;
+    controls.autoRotate = false;
+
+    // ----------------------------------------------------------------
+    // 1. 形状
+    // ----------------------------------------------------------------
+    const shape = new THREE.Shape();
+    const s = 0.65; 
+
+    shape.moveTo(3.6 * s, 24 * s); 
+    shape.lineTo(0.6 * s, 4 * s);
+    shape.lineTo(12 * s, 4 * s);
+    shape.lineTo(-3.6 * s, -24 * s);
+    shape.lineTo(-0.6 * s, -4 * s);
+    shape.lineTo(-12 * s, -4 * s);
+    shape.lineTo(3.6 * s, 24 * s);
+
+    const extrudeSettings = {
+        steps: 1,
+        depth: 4.0, 
+        bevelEnabled: false
+    };
+
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.center();
+
+    // ----------------------------------------------------------------
+    // 2. 粒子系统：高弥散 (High Diffusion)
+    // ----------------------------------------------------------------
+    const particleCount = 90000; 
+    const decorativeCount = 20000; // 新增：装饰性白色粒子数量
+    const totalCount = particleCount + decorativeCount; 
+    
+    const pos = new Float32Array(totalCount * 3);
+    const sizes = new Float32Array(totalCount);
+    const colors = new Float32Array(totalCount * 3);
+    const alphas = new Float32Array(totalCount); // 新增：透明度属性
+    const randoms = new Float32Array(totalCount); 
+    const speeds = new Float32Array(totalCount);
+    
+    const geoPos = geometry.attributes.position;
+    const vCount = geoPos.count;
+
+    const cCore = new THREE.Color(0xffffff); 
+    const cMid = new THREE.Color(0x00ffff);  
+    const cEdge = new THREE.Color(0x7700ff); 
+
+    for(let i=0; i<particleCount; i++) {
+        const fIdx = Math.floor(Math.random() * (vCount/3));
+        const i1=fIdx*3, i2=fIdx*3+1, i3=fIdx*3+2;
+        
+        const vA = new THREE.Vector3(geoPos.getX(i1), geoPos.getY(i1), geoPos.getZ(i1));
+        const vB = new THREE.Vector3(geoPos.getX(i2), geoPos.getY(i2), geoPos.getZ(i2));
+        const vC = new THREE.Vector3(geoPos.getX(i3), geoPos.getY(i3), geoPos.getZ(i3));
+
+        const r1=Math.random(), r2=Math.random();
+        const sq=Math.sqrt(r1);
+        const w1=1-sq, w2=(1-r2)*sq, w3=r2*sq;
+
+        let x = w1*vA.x + w2*vB.x + w3*vC.x;
+        let y = w1*vA.y + w2*vB.y + w3*vC.y;
+        let z = w1*vA.z + w2*vB.z + w3*vC.z;
+
+        // 【核心修改】：加大弥散力度，打散边缘
+        const typeRand = Math.random();
+        let spread = 1.0; // 基础弥散增加 (原0.7)，让核心也稍微松散一点
+        
+        if(typeRand > 0.85) { 
+            // 外层光晕 (15%): 极度松散，制造云雾感
+            spread = 5.5; 
+        } 
+        else if (typeRand > 0.65) {
+            // 过渡层 (20%): 连接核心与光晕，消除边界线
+            spread = 2.8; 
+        }
+
+        // 随机方向的散射偏移
+        x += (Math.random() - 0.5) * spread;
+        y += (Math.random() - 0.5) * spread;
+        // Z轴厚度增加，增强体积感
+        z += (Math.random() - 0.5) * spread * 3.5; 
+
+        pos[i*3] = x;
+        pos[i*3+1] = y;
+        pos[i*3+2] = z;
+
+        // 计算距离中心的距离
+        const dist = Math.sqrt(x*x + z*z*2.5) / 10.0;
+        
+        // 颜色：闪电本体保持蓝紫渐变，外层弥散粒子用白色
+        let color = new THREE.Color(); 
+        let baseAlpha = 1.0;
+        
+        if (typeRand > 0.85) {
+            // 外层光晕粒子：使用白色 + 极低透明度
+            color.copy(cCore); // 白色
+            baseAlpha = 0.05 + Math.random() * 0.1; // 5%-15%透明度
+        } else if (typeRand > 0.65) {
+            // 过渡层：白色到青色过渡 + 中等透明度
+            color.lerpColors(cCore, cMid, 0.5);
+            baseAlpha = 0.2 + Math.random() * 0.3; // 20%-50%透明度
+        } else {
+            // 核心闪电：保持原有的蓝紫渐变
+            if (dist < 0.25) {
+                let t = Math.min(1.0, dist * 4.0);
+                color.lerpColors(cCore, cMid, t);
+            } else {
+                let t = Math.min(1.0, (dist - 0.25) * 1.5);
+                color.lerpColors(cMid, cEdge, t);
+            }
+            // 核心高不透明度
+            baseAlpha = 0.8 + Math.random() * 0.2;
+        }
+
+        // 大小分布
+        const axisDist = Math.sqrt(x*x*0.5 + z*z);
+        let baseSize = 0.0;
+        
+        if (typeRand > 0.85) {
+            // 边缘光晕粒子：小一些，像素感
+            baseSize = 0.5 + Math.random() * 0.8;
+        } else {
+            const sizeR = Math.random();
+            if (sizeR < 0.8) {
+                baseSize = 0.1 + sizeR * 0.4; // 微小像素点
+            }
+            else if (sizeR < 0.96) {
+                baseSize = 0.5 + (sizeR - 0.8) * 2.5; // 中等颗粒缩小
+            }
+            else {
+                // 大光球：只在核心，也适当缩小
+                if(axisDist < 3.0) {
+                     baseSize = 0.8 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 1.5;
+                     color.copy(cCore); 
+                     baseAlpha = 1.0; // 大光球完全不透明
+                } else {
+                     baseSize = 0.4; 
+                }
+            }
+        }
+
+        sizes[i] = baseSize;
+        colors[i*3] = color.r;
+        colors[i*3+1] = color.g;
+        colors[i*3+2] = color.b;
+        alphas[i] = baseAlpha;
+        
+        randoms[i] = Math.random();
+        speeds[i] = 0.5 + Math.random() * 1.5;
+    }
+
+    // ----------------------------------------------------------------
+    // 添加装饰性白色粒子 - 围绕闪电轮廓漂浮
+    // ----------------------------------------------------------------
+    for(let i = particleCount; i < totalCount; i++) {
+        // 从闪电几何体表面采样
+        const fIdx = Math.floor(Math.random() * (vCount/3));
+        const i1=fIdx*3, i2=fIdx*3+1, i3=fIdx*3+2;
+        
+        const vA = new THREE.Vector3(geoPos.getX(i1), geoPos.getY(i1), geoPos.getZ(i1));
+        const vB = new THREE.Vector3(geoPos.getX(i2), geoPos.getY(i2), geoPos.getZ(i2));
+        const vC = new THREE.Vector3(geoPos.getX(i3), geoPos.getY(i3), geoPos.getZ(i3));
+
+        const r1=Math.random(), r2=Math.random();
+        const sq=Math.sqrt(r1);
+        const w1=1-sq, w2=(1-r2)*sq, w3=r2*sq;
+
+        let x = w1*vA.x + w2*vB.x + w3*vC.x;
+        let y = w1*vA.y + w2*vB.y + w3*vC.y;
+        let z = w1*vA.z + w2*vB.z + w3*vC.z;
+
+        // 在闪电轮廓附近分布，不要太远
+        const nearSpread = 1.5 + Math.random() * 2.0; // 轮廓周围1.5-3.5的范围
+        x += (Math.random() - 0.5) * nearSpread;
+        y += (Math.random() - 0.5) * nearSpread;
+        z += (Math.random() - 0.5) * nearSpread * 2.0;
+
+        pos[i*3] = x;
+        pos[i*3+1] = y;
+        pos[i*3+2] = z;
+
+        // 纯白色
+        colors[i*3] = 1.0;
+        colors[i*3+1] = 1.0;
+        colors[i*3+2] = 1.0;
+
+        // 小粒子，更高透明度，更亮
+        sizes[i] = 0.2 + Math.random() * 0.4;
+        alphas[i] = 0.5 + Math.random() * 0.5; // 50%-100%透明度，更亮
+        
+        randoms[i] = Math.random();
+        speeds[i] = 0.3 + Math.random() * 0.8; // 慢速飘动
+    }
+
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    pGeo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    pGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    pGeo.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1)); // 添加透明度属性
+    pGeo.setAttribute('aRand', new THREE.BufferAttribute(randoms, 1));
+    pGeo.setAttribute('aSpeed', new THREE.BufferAttribute(speeds, 1));
+
+    // ----------------------------------------------------------------
+    // 3. Shader：柔化调整
+    // ----------------------------------------------------------------
+    const getSoftTex = () => {
+        const c = document.createElement('canvas');
+        c.width = 128; c.height = 128; 
+        const ctx = c.getContext('2d');
+        const g = ctx.createRadialGradient(64,64,0, 64,64,64);
+        // 白色渐变，中心实心，边缘柔化
+        g.addColorStop(0, 'rgba(255,255,255,1)');
+        g.addColorStop(0.3, 'rgba(255,255,255,0.8)'); 
+        g.addColorStop(0.7, 'rgba(255,255,255,0.2)');
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0,0,128,128);
+        return new THREE.CanvasTexture(c);
+    };
+
+    const pMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0 },
+            uTex: { value: getSoftTex() },
+            uFlashTime: { value: 0 } // 闪烁时间控制
+        },
+        vertexShader: `
+            attribute float size;
+            attribute vec3 color;
+            attribute float alpha;
+            attribute float aRand;
+            attribute float aSpeed;
+            
+            varying vec3 vColor;
+            varying float vAlpha;
+            varying float vRand;
+            varying vec3 vPos;
+            uniform float uTime;
+            uniform float uFlashTime;
+
+            void main() {
+                vec3 pos = position;
+                vPos = pos; // 传递原始位置用于闪烁计算
+                vRand = aRand;
+
+                // === 闪电内部电流窜动效果 ===
+                // 沿着Y轴方向产生局部的快速波动，模拟电流传导
+                float electricFlow = sin(uTime * 8.0 + pos.y * 2.0 + aRand * 6.28) * 0.5 + 0.5;
+                electricFlow *= sin(uTime * 5.0 - pos.y * 1.5 + aRand * 3.14) * 0.5 + 0.5;
+                
+                // 只在核心区域有明显的电流效果
+                float distFromCenter = length(pos.xz);
+                float coreIntensity = smoothstep(4.0, 0.5, distFromCenter);
+                electricFlow *= coreIntensity;
+                
+                // 微小的位移，制造电流"跳动"感
+                pos.x += (electricFlow - 0.25) * 0.15;
+                pos.z += (electricFlow - 0.25) * 0.1;
+                
+                // 动态游动（保持原有）
+                float t = uTime * aSpeed; 
+                float moveX = sin(t * 0.5 + aRand * 10.0) * 0.25; 
+                float moveY = cos(t * 0.3 + aRand * 20.0) * 0.25; 
+                float moveZ = sin(t * 0.4 + pos.y) * 0.25;
+                pos += vec3(moveX, moveY, moveZ);
+                pos.y += sin(uTime * 0.2 + pos.x) * 0.1;
+
+                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+
+                // === 粒子大小：电流强度影响 ===
+                float sizePulse = 1.0 + electricFlow * 0.3;
+                gl_PointSize = size * sizePulse * (220.0 / -mvPosition.z);
+
+                // === 颜色：电流强的地方更亮 ===
+                vColor = color * (1.0 + electricFlow * 0.4);
+                vAlpha = alpha;
+            }
+        `,
+        fragmentShader: `
+            uniform sampler2D uTex;
+            uniform float uFlashTime;
+            varying vec3 vColor;
+            varying float vAlpha;
+            varying float vRand;
+            varying vec3 vPos;
+
+            void main() {
+                vec4 t = texture2D(uTex, gl_PointCoord);
+                if(t.a < 0.01) discard;
+                
+                // === 白色光电呼吸闪烁效果 ===
+                // 全局呼吸：缓慢的一亮一暗
+                float breathCycle = sin(uFlashTime * 0.8) * 0.5 + 0.5; // 0-1循环
+                
+                // 局部随机：不同粒子闪烁节奏稍有不同
+                float localBreath = sin(uFlashTime * 0.8 + vRand * 3.14) * 0.5 + 0.5;
+                
+                // 混合全局和局部，制造层次感
+                float breathIntensity = mix(breathCycle, localBreath, 0.3);
+                
+                // 只影响白色/浅色粒子（核心区域）
+                float brightness = (vColor.r + vColor.g + vColor.b) / 3.0;
+                float whiteMask = smoothstep(0.6, 1.0, brightness); // 只有亮色粒子参与呼吸
+                
+                // 呼吸强度：0.4-1.4倍（明显的一亮一暗，变暗到40%）
+                float finalBreath = 1.0 + (breathIntensity - 0.5) * 2.0 * whiteMask;
+                
+                vec3 finalColor = vColor * finalBreath;
+                float finalAlpha = vAlpha * finalBreath; // 透明度也参与呼吸
+                
+                gl_FragColor = vec4(finalColor, finalAlpha * t.a);
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide
+    });
+
+    const system = new THREE.Points(pGeo, pMat);
+    scene.add(system);
+    
+    // ----------------------------------------------------------------
+    // 4. 动画
+    // ----------------------------------------------------------------
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const t = clock.getElapsedTime();
+        pMat.uniforms.uTime.value = t;
+        pMat.uniforms.uFlashTime.value = t; // 持续更新用于呼吸效果
+
+        const maxAngle = THREE.Math.degToRad(30);
+        const swingSpeed = 0.5;
+        system.rotation.y = Math.sin(t * swingSpeed) * maxAngle;
+
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+</script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015" integrity="sha512-ZpsOmlRQV6y907TI0dKBHq9Md29nnaEIPlkf84rnaERnq6zvWvPUqr2ft8M1aS28oN72PdrCzSjY4U6VaAw1EQ==" data-cf-beacon='{"version":"2024.11.0","token":"0d2a830da81649f99a15c13251273855","r":1,"server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>

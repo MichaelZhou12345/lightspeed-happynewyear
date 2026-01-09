@@ -166,7 +166,7 @@ const lightningPath = (() => {
   const svgCenter = { x: 55, y: 71 }; // approximate centroid of the logo path
   const svgHeight = 138;              // max span after centering (from 69 to -69)
   const scale = CONFIG.tree.height / svgHeight;
-  const widthScale = 1.2; // 让闪电变胖，X方向放大1.2倍
+  const widthScale = 1.25; // 让闪电稍微胖一点，X方向放大1.25倍
 
   const svgPoints = [
     { x: 68, y: 2 },
@@ -1458,6 +1458,8 @@ const CINEMATIC_PLANET_PRESETS = [
   { hue: 25, type: 'desert' as const, name: '火星型' },
   { hue: 35, type: 'desert' as const, name: '沙漠世界' },
   { hue: 40, type: 'desert' as const, name: '干旱行星' },
+  // 熔岩行星 - 暗红色
+  { hue: 10, type: 'lava' as const, name: '熔岩世界' },
 ];
 
 // 真实星球纹理路径（不包含地球）- 增加更多种类
@@ -2101,7 +2103,7 @@ const FlameParticle = ({
 };
 
 // --- Component: Bolt Glow (实心填充闪电 - 粒子完全填满形状) ---
-const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: boolean }) => {
   const groupRef = useRef<THREE.Group>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const timeRef = useRef(0);
@@ -2209,14 +2211,31 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       }
       
       if (acceptParticle) {
-        // 添加深度变化 - 让闪电有立体厚度感
-        // 使用高斯分布让中间更密集，边缘更稀疏
-        const zRandom = (Math.random() + Math.random() + Math.random()) / 3; // 趋向中间
-        const z = (zRandom - 0.5) * 16; // 增加厚度到16单位
+        // 添加深度变化 - 让闪电有立体厚度感（参考demo.html的方式）
+        // 核心思路：使用高斯分布让粒子在Z轴上连续分布，中间密集边缘稀疏
+        const typeRand = Math.random();
+        let spread = 0.6; // 基础弥散，紧凑
+        
+        if (typeRand > 0.92) {
+          // 外层光晕 (8%): 稍微松散
+          spread = 1.5;
+        } else if (typeRand > 0.80) {
+          // 过渡层 (12%): 连接核心与光晕
+          spread = 1.0;
+        }
+        
+        // 应用弥散偏移 - X和Y方向保持紧凑
+        const finalX = x + (Math.random() - 0.5) * spread;
+        const finalY = y + (Math.random() - 0.5) * spread;
+        
+        // Z轴厚度 - 使用连续分布，按照demo.html的方式: spread * 3.5
+        // 基础厚度20，再根据spread放大
+        const zThickness = 20 + spread * 3.5 * 5;
+        const z = (Math.random() - 0.5) * zThickness;
         
         // 目标位置
-        targetPositions[idx * 3] = x;
-        targetPositions[idx * 3 + 1] = y;
+        targetPositions[idx * 3] = finalX;
+        targetPositions[idx * 3 + 1] = finalY;
         targetPositions[idx * 3 + 2] = z;
         
         // 噪声种子
@@ -2259,7 +2278,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         }
         
         // 根据Z位置调整颜色亮度 - 后面的粒子更暗，增加立体感
-        const zDepthFactor = 0.6 + ((z + 8) / 16) * 0.4; // 后面0.6，前面1.0
+        const zDepthFactor = 0.6 + ((z + 25) / 50) * 0.4; // 后面0.6，前面1.0
         particleColor.multiplyScalar(zDepthFactor);
         
         colors[idx * 3] = particleColor.r;
@@ -2267,7 +2286,8 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         colors[idx * 3 + 2] = particleColor.b;
         
         // 粒子大小 - 根据Z位置和边缘距离调整
-        const zNorm = (z + 8) / 16; // 归一化到0-1
+        const maxZSize = 25; // 最大Z值（层级范围约 -23 到 +23）
+        const zNorm = (z + maxZSize) / (maxZSize * 2); // 归一化到0-1
         const depthSize = 0.6 + zNorm * 0.8; // 后面0.6，前面1.4
         // 边缘的粒子更小
         sizes[idx] = (0.8 + Math.random() * 1.0) * depthSize * (0.4 + edgeFactor * 0.6);
@@ -2311,6 +2331,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
       uniforms: {
         uTime: { value: 0 },
         uProgress: { value: 0 },
+        uIsMobile: { value: 0 }, // 移动端标记
       },
       vertexShader: `
         attribute vec3 aTargetPos;
@@ -2321,6 +2342,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         
         uniform float uTime;
         uniform float uProgress;
+        uniform float uIsMobile;
         
         varying vec3 vColor;
         varying float vAlpha;
@@ -2361,10 +2383,12 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           finalPos.y += (wave2 + wave3) * waveAmount * 0.6;
           finalPos.z += wave3 * waveAmount;
           
-          // 散开时的飘动
-          float wobble = sin(uTime * 2.0 + aNoiseSeed.x * 0.1) * (1.0 - t) * 3.0;
-          finalPos.x += wobble;
-          finalPos.y += cos(uTime * 1.5 + aNoiseSeed.y * 0.1) * (1.0 - t) * 2.0;
+          // 散开时的飘动 - 移动端禁用
+          if (uIsMobile < 0.5) {
+            float wobble = sin(uTime * 2.0 + aNoiseSeed.x * 0.1) * (1.0 - t) * 3.0;
+            finalPos.x += wobble;
+            finalPos.y += cos(uTime * 1.5 + aNoiseSeed.y * 0.1) * (1.0 - t) * 2.0;
+          }
           
           // 柔和的闪烁
           float flicker = 0.9 + sin(uTime * 4.0 + aNoiseSeed.x) * 0.1 * t;
@@ -2378,6 +2402,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         }
       `,
       fragmentShader: `
+        uniform float uTime;
         varying vec3 vColor;
         varying float vAlpha;
         
@@ -2392,8 +2417,25 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
           // 强化的光晕
           float softGlow = exp(-r * 0.8);
           
-          vec3 finalColor = vColor * (2.2 + softGlow * 1.2);
-          float finalAlpha = vAlpha * glow * 2.5;
+          // === 白蓝色呼吸闪烁效果（仿demo.html） ===
+          // 全局呼吸：缓慢的一亮一暗
+          float breathCycle = sin(uTime * 1.2) * 0.5 + 0.5; // 0-1循环，加快一点
+          
+          // 白色和蓝色之间变换
+          vec3 whiteColor = vec3(1.0, 1.0, 1.0);
+          vec3 blueColor = vec3(0.4, 0.6, 1.0);
+          
+          // 基础颜色混合：呼吸时在白色和蓝色之间切换
+          vec3 breathColor = mix(blueColor, whiteColor, breathCycle);
+          
+          // 与原始颜色混合（保留一些原始色调）
+          vec3 mixedColor = mix(vColor, breathColor, 0.7);
+          
+          // 亮度呼吸
+          float finalBreath = 0.8 + breathCycle * 0.6;
+          
+          vec3 finalColor = mixedColor * (2.2 + softGlow * 1.2) * finalBreath;
+          float finalAlpha = vAlpha * glow * 2.5 * finalBreath;
           
           gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
         }
@@ -2415,6 +2457,7 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
     
     shaderMaterial.uniforms.uTime.value = timeRef.current;
     shaderMaterial.uniforms.uProgress.value = progressRef.current;
+    shaderMaterial.uniforms.uIsMobile.value = isMobile ? 1 : 0;
   });
   
   return (
@@ -2431,6 +2474,216 @@ const BoltGlow = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
         </bufferGeometry>
       </points>
     </group>
+  );
+};
+
+// --- Component: Spiral Ribbon (螺旋丝带 - 金属质感粒子) ---
+const SpiralRibbon = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
+  const pointsRef = useRef<THREE.Points>(null);
+  const timeRef = useRef(0);
+  const progressRef = useRef(state === 'FORMED' ? 1 : 0);
+  
+  // 螺旋参数
+  const spiralTurns = 4.5;
+  const minHeight = -100;
+  const maxHeight = 80;
+  const heightRange = maxHeight - minHeight;
+  
+  // 生成螺旋丝带粒子
+  const { positions, dispersePositions, colors, sizes, alphas, tParams, widthOffsets, thicknessOffsets } = useMemo(() => {
+    const particleCount = 3000;
+    
+    const positions = new Float32Array(particleCount * 3);
+    const dispersePositions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const alphas = new Float32Array(particleCount);
+    const tParams = new Float32Array(particleCount); // 记录每个粒子在螺旋上的位置
+    const widthOffsets = new Float32Array(particleCount); // 记录宽度偏移（半径方向）
+    const thicknessOffsets = new Float32Array(particleCount); // 记录厚度偏移（高度方向）
+    
+    // 金属色渐变 - 更白的色调
+    const goldColor = new THREE.Color('#E8E8E0');
+    const roseGoldColor = new THREE.Color('#D4D4CC');
+    const whiteColor = new THREE.Color('#FFFFFF');
+    
+    for (let i = 0; i < particleCount; i++) {
+      const t = i / particleCount; // 0 到 1
+      tParams[i] = t;
+      
+      // 丝带宽度方向的偏移
+      const ribbonWidth = 14;
+      const widthOffset = (Math.random() - 0.5) * ribbonWidth;
+      widthOffsets[i] = widthOffset;
+      
+      // 丝带厚度方向的偏移（高度方向）
+      const ribbonThickness = 6;
+      const thicknessOffset = (Math.random() - 0.5) * ribbonThickness;
+      thicknessOffsets[i] = thicknessOffset;
+      
+      // 散开位置
+      const disperseRadius = 200 + Math.random() * 300;
+      const disperseTheta = Math.random() * Math.PI * 2;
+      const dispersePhi = Math.acos(2 * Math.random() - 1);
+      dispersePositions[i * 3] = Math.sin(dispersePhi) * Math.cos(disperseTheta) * disperseRadius;
+      dispersePositions[i * 3 + 1] = Math.sin(dispersePhi) * Math.sin(disperseTheta) * disperseRadius;
+      dispersePositions[i * 3 + 2] = Math.cos(dispersePhi) * disperseRadius;
+      
+      // 初始位置 = 散开位置
+      positions[i * 3] = dispersePositions[i * 3];
+      positions[i * 3 + 1] = dispersePositions[i * 3 + 1];
+      positions[i * 3 + 2] = dispersePositions[i * 3 + 2];
+      
+      // 金属质感颜色
+      const angle = t * spiralTurns * Math.PI * 2;
+      const colorMix = (Math.sin(angle * 2) + 1) / 2;
+      let particleColor = goldColor.clone().lerp(roseGoldColor, colorMix * 0.5);
+      
+      // 添加高光效果
+      const highlightIntensity = Math.pow(Math.abs(Math.sin(angle * 3 + t * 5)), 3);
+      particleColor.lerp(whiteColor, highlightIntensity * 0.6);
+      
+      colors[i * 3] = particleColor.r;
+      colors[i * 3 + 1] = particleColor.g;
+      colors[i * 3 + 2] = particleColor.b;
+      
+      // 粒子大小
+      const centerDist = Math.abs(widthOffset) / (ribbonWidth / 2);
+      sizes[i] = (1.2 - centerDist * 0.6) * (0.8 + Math.random() * 0.4);
+      
+      // 透明度
+      const edgeFade = 1 - centerDist * 0.5;
+      alphas[i] = edgeFade * (0.6 + Math.random() * 0.4);
+    }
+    
+    return { positions, dispersePositions, colors, sizes, alphas, tParams, widthOffsets, thicknessOffsets };
+  }, []);
+  
+  // 着色器材质 - 金属质感 + 流动效果
+  const shaderMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+        uSpiralTurns: { value: spiralTurns },
+        uMinHeight: { value: minHeight },
+        uHeightRange: { value: heightRange },
+      },
+      vertexShader: `
+        attribute vec3 aDispersePos;
+        attribute float aSize;
+        attribute float aAlpha;
+        attribute float aTParam;
+        attribute float aWidthOffset;
+        attribute float aThicknessOffset;
+        
+        uniform float uTime;
+        uniform float uProgress;
+        uniform float uSpiralTurns;
+        uniform float uMinHeight;
+        uniform float uHeightRange;
+        
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        float cubicInOut(float t) {
+          return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
+        }
+        
+        void main() {
+          vColor = color;
+          
+          float progress = cubicInOut(uProgress);
+          
+          // 流动效果 - t随时间变化，形成向上流动
+          float flowSpeed = 0.02; // 流动速度，更慢
+          float flowingT = mod(aTParam + uTime * flowSpeed, 1.0);
+          
+          // 根据流动的t计算螺旋位置
+          float height = uMinHeight + flowingT * uHeightRange + aThicknessOffset;
+          float angle = flowingT * uSpiralTurns * 6.28318; // 2*PI
+          
+          // 半径随高度变化 - 更宽松的环绕
+          float baseRadius = 60.0 - flowingT * 25.0;
+          float radius = baseRadius + aWidthOffset;
+          
+          // 计算目标位置
+          vec3 targetPos;
+          targetPos.x = cos(angle) * radius;
+          targetPos.y = height;
+          targetPos.z = sin(angle) * radius;
+          
+          // 插值位置
+          vec3 finalPos = mix(aDispersePos, targetPos, progress);
+          
+          // 底部淡入效果
+          float bottomFade = smoothstep(0.0, 0.15, flowingT);
+          // 顶部淡出效果
+          float topFade = smoothstep(1.0, 0.85, flowingT);
+          float fadeFactor = bottomFade * topFade;
+          
+          // 金属闪烁效果
+          float shimmer = 0.9 + sin(uTime * 3.0 + angle * 2.0) * 0.1;
+          
+          vAlpha = aAlpha * progress * shimmer * fadeFactor * 1.5;
+          
+          vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+          gl_PointSize = aSize * (1.0 + progress * 0.3) * shimmer * fadeFactor * (320.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        varying float vAlpha;
+        
+        void main() {
+          float r = distance(gl_PointCoord, vec2(0.5));
+          if (r > 0.5) discard;
+          
+          // 金属质感 - 中心亮，边缘柔和
+          float glow = 1.0 - r * 2.0;
+          glow = pow(glow, 0.4);
+          
+          // 金属高光 - 更亮
+          float highlight = pow(glow, 2.0) * 0.8;
+          
+          vec3 finalColor = vColor * (1.5 + highlight);
+          float finalAlpha = vAlpha * glow * 1.3;
+          
+          gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      vertexColors: true,
+    });
+  }, [spiralTurns, minHeight, heightRange]);
+  
+  useFrame((stateObj, delta) => {
+    timeRef.current = stateObj.clock.elapsedTime;
+    const isFormed = state === 'FORMED';
+    const targetProgress = isFormed ? 1 : 0;
+    
+    progressRef.current = MathUtils.damp(progressRef.current, targetProgress, 2.5, delta);
+    
+    shaderMaterial.uniforms.uTime.value = timeRef.current;
+    shaderMaterial.uniforms.uProgress.value = progressRef.current;
+  });
+  
+  return (
+    <points ref={pointsRef} material={shaderMaterial}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+        <bufferAttribute attach="attributes-aDispersePos" args={[dispersePositions, 3]} />
+        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
+        <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
+        <bufferAttribute attach="attributes-aAlpha" args={[alphas, 1]} />
+        <bufferAttribute attach="attributes-aTParam" args={[tParams, 1]} />
+        <bufferAttribute attach="attributes-aWidthOffset" args={[widthOffsets, 1]} />
+        <bufferAttribute attach="attributes-aThicknessOffset" args={[thicknessOffsets, 1]} />
+      </bufferGeometry>
+    </points>
   );
 };
 
@@ -3963,27 +4216,33 @@ const ShootingStar = ({
   const progress = useRef(-delay);
   const lifespan = 2;
   
-  // 创建流星纹理 - 右边亮（头部），左边透明（尾部）
+  // 创建流星纹理 - 右边亮（头部），左边透明（尾部），头部更尖细
   const meteorTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
-    canvas.height = 8;
+    canvas.height = 6; // 更细
     const ctx = canvas.getContext('2d')!;
     
     // 渐变方向：左边透明（尾部） -> 右边亮（头部）
     const gradient = ctx.createLinearGradient(0, 0, 256, 0);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');      // 尾部透明
-    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');  // 渐亮
-    gradient.addColorStop(0.9, color);                        // 颜色
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');  // 渐亮
+    gradient.addColorStop(0.85, 'rgba(255, 255, 255, 0.5)'); // 接近头部
+    gradient.addColorStop(0.95, color);                       // 颜色
     gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');      // 头部最亮
     
-    // 纵向柔和边缘
-    for (let y = 0; y < 8; y++) {
-      const dist = Math.abs(y - 4) / 4;
-      const alpha = 1 - dist * dist;
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, y, 256, 1);
+    // 纵向柔和边缘 - 头部更尖细
+    for (let x = 0; x < 256; x++) {
+      const xRatio = x / 256;
+      // 头部（右边）更细，尾部（左边）稍宽
+      const thickness = 1 + (1 - xRatio) * 2; // 头部1，尾部3
+      for (let y = 0; y < 6; y++) {
+        const dist = Math.abs(y - 3) / thickness;
+        const alpha = Math.max(0, 1 - dist * dist);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, y, 1, 1);
+      }
     }
     
     const texture = new THREE.CanvasTexture(canvas);
@@ -3991,22 +4250,22 @@ const ShootingStar = ({
     return texture;
   }, [color]);
   
-  // 模糊光晕纹理
+  // 模糊光晕纹理 - 更细
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
-    canvas.height = 32;
+    canvas.height = 16; // 更细
     const ctx = canvas.getContext('2d')!;
     
     const gradient = ctx.createLinearGradient(0, 0, 256, 0);
     gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-    gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.2)');
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.15)');
     gradient.addColorStop(0.9, color);
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0.8)');
     
-    for (let y = 0; y < 32; y++) {
-      const dist = Math.abs(y - 16) / 16;
-      const alpha = Math.pow(1 - dist, 2) * 0.5;
+    for (let y = 0; y < 16; y++) {
+      const dist = Math.abs(y - 8) / 8;
+      const alpha = Math.pow(1 - dist, 2) * 0.4;
       ctx.globalAlpha = alpha;
       ctx.fillStyle = gradient;
       ctx.fillRect(0, y, 256, 1);
@@ -4037,11 +4296,11 @@ const ShootingStar = ({
       
       const t = progress.current / lifespan;
       
-      // 从右上到左下移动
+      // 从右上到左下移动 - 更斜的角度
       const moveDistance = t * 500;
       const currentPos = startPos.clone();
-      currentPos.x -= moveDistance * 0.6;
-      currentPos.y -= moveDistance * 0.8;
+      currentPos.x -= moveDistance * 0.85; // 更大的水平位移
+      currentPos.y -= moveDistance * 0.55; // 更小的垂直位移
       
       groupRef.current.position.copy(currentPos);
       
@@ -4059,16 +4318,14 @@ const ShootingStar = ({
     }
   });
   
-  // 流星倾斜角度 - 头朝左下，尾朝右上
-  // 运动方向是(-0.6, -0.8)，流星body要沿着这个方向
-  // 角度 = atan2(-0.8, -0.6) + PI = 约233度，但我们要让纹理的左边（亮头）朝向运动方向
-  const angle = Math.atan2(-0.8, -0.6); // 约 -126度 = -2.21弧度
+  // 流星倾斜角度 - 更斜，头朝左下
+  const angle = Math.atan2(-0.55, -0.85); // 约 -147度，更斜
   
   return (
     <group ref={groupRef}>
-      {/* 主线条 */}
+      {/* 主线条 - 更细 */}
       <mesh rotation={[0, 0, angle]}>
-        <planeGeometry args={[length, 1.5]} />
+        <planeGeometry args={[length, 0.8]} />
         <meshBasicMaterial 
           map={meteorTexture}
           transparent
@@ -4079,9 +4336,9 @@ const ShootingStar = ({
         />
       </mesh>
       
-      {/* 模糊光晕层1 */}
+      {/* 模糊光晕层1 - 更细 */}
       <mesh rotation={[0, 0, angle]} userData={{ isGlow: true }}>
-        <planeGeometry args={[length, 4]} />
+        <planeGeometry args={[length, 2]} />
         <meshBasicMaterial 
           map={glowTexture}
           transparent
@@ -4092,9 +4349,9 @@ const ShootingStar = ({
         />
       </mesh>
       
-      {/* 模糊光晕层2 */}
+      {/* 模糊光晕层2 - 更细 */}
       <mesh rotation={[0, 0, angle]} userData={{ isGlow: true }}>
-        <planeGeometry args={[length, 8]} />
+        <planeGeometry args={[length, 4]} />
         <meshBasicMaterial 
           map={glowTexture}
           transparent
@@ -4111,22 +4368,26 @@ const ShootingStar = ({
 // --- Component: Shooting Stars System (流星群) ---
 const ShootingStars = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
   const meteors = useMemo(() => {
-    // 流星配置 - 从右上方不同位置出发
+    // 流星配置 - 扩大范围，覆盖整个屏幕
     const configs = [
-      { x: 0, y: 0, d: 1, color: '#7DF9FF' },   // 青色
-      { x: 80, y: 30, d: 2, color: '#ffffff' },
-      { x: 160, y: -20, d: 3, color: '#ffffff' },
-      { x: 50, y: 60, d: 1.5, color: '#B0E0E6' }, // 粉蓝
-      { x: 120, y: 80, d: 2.5, color: '#ffffff' },
-      { x: 200, y: 40, d: 3.5, color: '#E0FFFF' }, // 蓝白
+      { x: -200, y: 50, d: 1, color: '#7DF9FF' },   // 左侧
+      { x: -100, y: 120, d: 2, color: '#ffffff' },
+      { x: 0, y: 0, d: 3, color: '#ffffff' },
+      { x: 100, y: 80, d: 1.5, color: '#B0E0E6' },
+      { x: 200, y: 30, d: 2.5, color: '#ffffff' },
+      { x: 300, y: 100, d: 3.5, color: '#E0FFFF' },
+      { x: -150, y: 150, d: 4, color: '#ffffff' },   // 额外流星
+      { x: 250, y: -30, d: 4.5, color: '#7DF9FF' },
+      { x: -50, y: 200, d: 5, color: '#B0E0E6' },
+      { x: 350, y: 60, d: 5.5, color: '#ffffff' },
     ];
     
     return configs.map((cfg, idx) => {
-      // 起始位置在右上方
+      // 起始位置扩大范围
       const startPos = new THREE.Vector3(
-        100 + cfg.x,      // 右侧
-        200 + cfg.y,      // 上方
-        -150 + idx * 10   // 更远的深度，确保在闪电后面
+        cfg.x,            // 横向分布更广
+        250 + cfg.y,      // 上方
+        -200 + idx * 15   // 深度分布
       );
       
       return {
@@ -5116,17 +5377,20 @@ const Experience = ({
   rotationSpeedVertical,
   onPhotoSelect,
   focusPoint,
-  pinchActive
+  pinchActive,
+  isMobile
 }: {
   sceneState: 'CHAOS' | 'FORMED',
   rotationSpeed: number,
   rotationSpeedVertical: number,
   onPhotoSelect: (path: string, borderColor?: string, isClick?: boolean) => void,
   focusPoint?: { x: number; y: number } | null,
-  pinchActive?: boolean
+  pinchActive?: boolean,
+  isMobile?: boolean
 }) => {
   const controlsRef = useRef<any>(null);
   const sceneGroupRef = useRef<THREE.Group>(null);
+  const boltGroupRef = useRef<THREE.Group>(null); // 闪电旋转组
   
   // 平滑插值的目标速度
   const smoothSpeedX = useRef(0);
@@ -5134,6 +5398,9 @@ const Experience = ({
   // 惯性速度
   const velocityX = useRef(0);
   const velocityY = useRef(0);
+  // 闪电旋转速度
+  const boltVelocityY = useRef(0);
+  const boltSmoothedSpeed = useRef(0);
 
   // Auto-spin when dispersed; gesture can add/subtract spin (只允许水平旋转)
   useFrame((_, delta) => {
@@ -5166,12 +5433,39 @@ const Experience = ({
         // sceneGroupRef.current.rotation.x += velocityY.current * delta;
       }
     }
+    
+    // 闪电组旋转 - 只用鼠标控制，不自动旋转
+    if (boltGroupRef.current) {
+      // 平滑插值手势输入
+      boltSmoothedSpeed.current = MathUtils.lerp(boltSmoothedSpeed.current, rotationSpeed, 0.15);
+      
+      const targetVel = boltSmoothedSpeed.current * 6;
+      const friction = 0.97;
+      
+      if (Math.abs(rotationSpeed) > 0.003) {
+        boltVelocityY.current = MathUtils.lerp(boltVelocityY.current, targetVel, 0.25);
+      } else {
+        boltVelocityY.current *= friction;
+      }
+      
+      // 只有手势控制，没有自动旋转
+      const autoRotation = -0.15; // 缓慢自转，负值向左转
+      boltGroupRef.current.rotation.y += (boltVelocityY.current + autoRotation) * delta;
+    }
   });
 
   // Keep formed state facing front
   useEffect(() => {
-    if (sceneState === 'FORMED' && sceneGroupRef.current) {
-      sceneGroupRef.current.rotation.set(0, 0, 0);
+    if (sceneState === 'FORMED') {
+      if (sceneGroupRef.current) {
+        sceneGroupRef.current.rotation.set(0, 0, 0);
+      }
+      // 重置闪电组旋转到初始状态
+      if (boltGroupRef.current) {
+        boltGroupRef.current.rotation.set(0, 0, 0);
+        boltVelocityY.current = 0;
+        boltSmoothedSpeed.current = 0;
+      }
     }
   }, [sceneState]);
 
@@ -5201,15 +5495,15 @@ const Experience = ({
       <fog attach="fog" args={[sceneState === 'CHAOS' ? '#000005' : '#0a0520', sceneState === 'CHAOS' ? 800 : 500, sceneState === 'CHAOS' ? 2000 : 1800]} />
       
       {/* 静态星空背景 - 增加星辰数量 */}
-      <Stars radius={300} depth={150} count={sceneState === 'CHAOS' ? 4000 : 10000} factor={6} saturation={0.5} fade speed={0.2} />
-      <Stars radius={500} depth={250} count={sceneState === 'CHAOS' ? 5000 : 12000} factor={8} saturation={0.4} fade speed={0.15} />
-      <Stars radius={700} depth={350} count={sceneState === 'CHAOS' ? 3000 : 8000} factor={10} saturation={0.35} fade speed={0.1} />
-      <Stars radius={1000} depth={450} count={sceneState === 'CHAOS' ? 2000 : 5000} factor={12} saturation={0.3} fade speed={0.08} />
+      <Stars radius={300} depth={150} count={sceneState === 'CHAOS' ? 4000 : 10000} factor={sceneState === 'CHAOS' ? 2 : 6} saturation={0.5} fade speed={0.2} />
+      <Stars radius={500} depth={250} count={sceneState === 'CHAOS' ? 5000 : 12000} factor={sceneState === 'CHAOS' ? 2 : 8} saturation={0.4} fade speed={0.15} />
+      <Stars radius={700} depth={350} count={sceneState === 'CHAOS' ? 3000 : 8000} factor={sceneState === 'CHAOS' ? 2.5 : 10} saturation={0.35} fade speed={0.1} />
+      <Stars radius={1000} depth={450} count={sceneState === 'CHAOS' ? 2000 : 5000} factor={sceneState === 'CHAOS' ? 3 : 12} saturation={0.3} fade speed={0.08} />
       
       {/* 远景微弱星星 - 只在CHAOS状态显示，减少数量 */}
       {sceneState === 'CHAOS' && (
         <>
-          <Stars radius={1300} depth={600} count={2000} factor={15} saturation={0.2} fade speed={0.05} />
+          <Stars radius={1300} depth={600} count={2000} factor={3} saturation={0.2} fade speed={0.05} />
         </>
       )}
       
@@ -5264,14 +5558,7 @@ const Experience = ({
         color="#6040a0" 
       />
       
-      {/* 中心恒星光 - 只在CHAOS状态显示，增强深空感 */}
-      {sceneState === 'CHAOS' && (
-        <>
-          <pointLight position={[0, 0, 0]} intensity={1200} color="#ffffff" distance={4500} decay={1.5} />
-          {/* 紫色环境光晕 */}
-          <pointLight position={[0, 0, 0]} intensity={800} color="#8060ff" distance={2000} decay={2} />
-        </>
-      )}
+      {/* 中心恒星光 - 已移除，避免顶部发光点 */}
       {/* 原有点光源 - 只在FORMED状态显示 */}
       {sceneState === 'FORMED' && (
         <>
@@ -5285,8 +5572,14 @@ const Experience = ({
       {/* 闪电背景蓝色雾气 */}
       <LightningAura state={sceneState} />
       
-      {/* 闪电效果 - 独立于旋转组，只淡入淡出不旋转 */}
-      <BoltGlow state={sceneState} />
+      {/* 闪电旋转组 - 包含闪电和丝带，可以用鼠标拖动旋转 */}
+      <group ref={boltGroupRef}>
+        {/* 螺旋丝带 */}
+        <SpiralRibbon state={sceneState} />
+        
+        {/* 闪电效果 */}
+        <BoltGlow state={sceneState} />
+      </group>
       {/* <LightningSparks state={sceneState} /> */}
       {/* <BoltFill state={sceneState} /> - 已合并到 BoltGlow 中 */}
       {/* TopStar 已移除 - 去掉顶部大光球 */}
@@ -5428,7 +5721,7 @@ const GestureController = ({ onGesture, onMove, onMoveVertical, onStatus, debugM
   );
 };
 
-// --- Mouse Controller ---
+// --- Mouse Controller (支持触摸) ---
 const MouseController = ({ 
   onMove, 
   onMoveVertical, 
@@ -5447,19 +5740,19 @@ const MouseController = ({
     if (!container) return;
 
     const handleMouseDown = (e: MouseEvent) => {
-      if (sceneState !== 'CHAOS') return;
+      // 允许所有状态下拖动
       isDragging.current = true;
       lastPos.current = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || sceneState !== 'CHAOS') return;
+      if (!isDragging.current) return;
       
       const deltaX = e.clientX - lastPos.current.x;
       const deltaY = e.clientY - lastPos.current.y;
       
       // 将鼠标移动转换为旋转速度
-      const sensitivity = 0.008;
+      const sensitivity = 0.025;
       onMove(deltaX * sensitivity);
       onMoveVertical(-deltaY * sensitivity);
       
@@ -5486,11 +5779,49 @@ const MouseController = ({
     window.addEventListener('mouseup', handleMouseUp);
     container.addEventListener('mouseleave', handleMouseLeave);
 
+    // 触摸事件支持
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDragging.current = true;
+        lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current || e.touches.length !== 1) return;
+      
+      const deltaX = e.touches[0].clientX - lastPos.current.x;
+      const deltaY = e.touches[0].clientY - lastPos.current.y;
+      
+      // 触摸灵敏度稍高一些
+      const sensitivity = 0.03;
+      onMove(deltaX * sensitivity);
+      onMoveVertical(-deltaY * sensitivity);
+      
+      lastPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      e.preventDefault(); // 防止页面滚动
+    };
+
+    const handleTouchEnd = () => {
+      isDragging.current = false;
+      onMove(0);
+      onMoveVertical(0);
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
     return () => {
       container.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       container.removeEventListener('mouseleave', handleMouseLeave);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
     };
   }, [sceneState, onMove, onMoveVertical]);
 
@@ -5504,8 +5835,8 @@ const MouseController = ({
         width: '100%',
         height: '100%',
         zIndex: 2,
-        cursor: sceneState === 'CHAOS' ? 'grab' : 'default',
-        pointerEvents: sceneState === 'CHAOS' ? 'auto' : 'none',
+        cursor: 'grab',
+        pointerEvents: 'auto',
       }}
     />
   );
@@ -5545,17 +5876,37 @@ export default function GrandTreeApp() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
-      {/* 烟花特效 - 只在 FORMED（聚合态/闪电形状）时显示 */}
-      <Fireworks visible={sceneState === 'FORMED'} />
+      {/* 左上角 Logo */}
+      {sceneState === 'FORMED' && (
+        <img 
+          src="/lightspeed-logo.png" 
+          alt="Lightspeed Studios" 
+          style={{
+            position: 'absolute',
+            top: isMobile ? '12px' : '20px',
+            left: isMobile ? '12px' : '20px',
+            height: isMobile ? '40px' : '60px',
+            zIndex: 10,
+            pointerEvents: 'none',
+            opacity: 0.6,
+            filter: 'brightness(0.7)',
+            mixBlendMode: 'lighten',
+          }}
+        />
+      )}
+      
+      {/* 烟花特效 - 已禁用 */}
+      {/* <Fireworks visible={sceneState === 'FORMED'} /> */}
       
       <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
-        <Canvas dpr={[1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
+        <Canvas dpr={isMobile ? [1, 1.5] : [1, 2]} gl={{ toneMapping: THREE.ReinhardToneMapping }} shadows>
             <Experience
               sceneState={sceneState}
               rotationSpeed={rotationSpeed + mouseRotationSpeed}
               rotationSpeedVertical={rotationSpeedVertical + mouseRotationSpeedVertical}
               focusPoint={focusPoint}
               pinchActive={pinchActive}
+              isMobile={isMobile}
             onPhotoSelect={(path: string, borderColor?: string, isClick?: boolean) => {
                 const message = NEW_YEAR_GREETINGS[Math.floor(Math.random() * NEW_YEAR_GREETINGS.length)];
                 setSelectedPhoto({ path, message, borderColor: borderColor ?? '#fff' });
@@ -5565,7 +5916,7 @@ export default function GrandTreeApp() {
         </Canvas>
       </div>
       
-      {/* 鼠标控制器 - 在CHAOS状态下启用 */}
+      {/* 鼠标/触摸控制器 */}
       <MouseController
         onMove={setMouseRotationSpeed}
         onMoveVertical={setMouseRotationSpeedVertical}
@@ -5613,12 +5964,12 @@ export default function GrandTreeApp() {
                   }}
                 />
               </div>
-              <div style={{ marginTop: '14px', padding: '10px 8px 0', textAlign: 'center', color: '#222', fontSize: '16px', fontWeight: 600, letterSpacing: '0.5px' }}>
+              <div style={{ marginTop: isMobile ? '10px' : '14px', padding: isMobile ? '6px 6px 0' : '10px 8px 0', textAlign: 'center', color: '#222', fontSize: isMobile ? '14px' : '16px', fontWeight: 600, letterSpacing: '0.5px' }}>
                 {selectedPhoto.message}
               </div>
             </div>
             {/* 保存和分享按钮 */}
-            <div style={{ display: 'flex', gap: '40px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: isMobile ? '16px' : '40px', justifyContent: 'center' }}>
               <button
                 onClick={async (e) => {
                   e.stopPropagation();
@@ -5639,13 +5990,13 @@ export default function GrandTreeApp() {
                 }}
                 style={{
                   flex: 1,
-                  maxWidth: '160px',
-                  padding: '14px 24px',
+                  maxWidth: isMobile ? '120px' : '160px',
+                  padding: isMobile ? '10px 16px' : '14px 24px',
                   backgroundColor: 'rgba(255, 215, 0, 0.9)',
                   border: 'none',
-                  borderRadius: '12px',
+                  borderRadius: isMobile ? '10px' : '12px',
                   color: '#222',
-                  fontSize: '15px',
+                  fontSize: isMobile ? '13px' : '15px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   boxShadow: '0 4px 15px rgba(255, 215, 0, 0.3)',
@@ -5662,13 +6013,13 @@ export default function GrandTreeApp() {
                 }}
                 style={{
                   flex: 1,
-                  maxWidth: '160px',
-                  padding: '14px 24px',
+                  maxWidth: isMobile ? '120px' : '160px',
+                  padding: isMobile ? '10px 16px' : '14px 24px',
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   border: '1px solid rgba(255, 215, 0, 0.5)',
-                  borderRadius: '12px',
+                  borderRadius: isMobile ? '10px' : '12px',
                   color: '#FFD700',
-                  fontSize: '15px',
+                  fontSize: isMobile ? '13px' : '15px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   backdropFilter: 'blur(4px)',
@@ -5684,7 +6035,7 @@ export default function GrandTreeApp() {
 
       {/* UI - AI Status */}
       <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
-        {/* Happy New Year - 花体字 - 只在FORMED状态显示 */}
+        {/* Happy New Year - 已禁用
         <div style={{ 
           fontFamily: "'Great Vibes', 'Dancing Script', 'Pacifico', cursive",
           fontSize: '56px', 
@@ -5702,6 +6053,7 @@ export default function GrandTreeApp() {
         }}>
           Happy New Year
         </div>
+        */}
         {/* 光子工作室文字 - 已注释
         <div style={{ 
           fontSize: '22px', 
