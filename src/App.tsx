@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
 import { Canvas, useFrame, extend, useThree, useLoader } from '@react-three/fiber';
-import Fireworks from './Fireworks';
 import {
   OrbitControls,
   Environment,
@@ -160,41 +159,44 @@ const AtmosphereMaterial = shaderMaterial(
 );
 extend({ AtmosphereMaterial });
 
-// --- Helper: Lightning Shape (Lightspeed logo outline mapped into 3D space) ---
-// SVG points from lightspeed-logo -> recentered and scaled to tree height
+// --- Helper: Lightning Shape (基于demo.html的闪电形状) ---
+// 使用demo.html中的Shape定义，缩放到合适大小
 const lightningPath = (() => {
-  const svgCenter = { x: 55, y: 71 }; // approximate centroid of the logo path
-  const svgHeight = 138;              // max span after centering (from 69 to -69)
-  const scale = CONFIG.tree.height / svgHeight;
-  const widthScale = 1.25; // 让闪电稍微胖一点，X方向放大1.25倍
-
-  const svgPoints = [
-    { x: 68, y: 2 },
-    { x: 28, y: 72 },
-    { x: 52, y: 72 },
-    { x: 38, y: 140 },
-    { x: 82, y: 58 },
-    { x: 58, y: 58 },
+  // demo.html中的闪电形状点（缩放因子s=0.65后的坐标）
+  // 原始点: moveTo(3.6*s, 24*s) -> lineTo(0.6*s, 4*s) -> lineTo(12*s, 4*s) -> 
+  //         lineTo(-3.6*s, -24*s) -> lineTo(-0.6*s, -4*s) -> lineTo(-12*s, -4*s) -> close
+  const s = 0.65;
+  const demoPoints = [
+    { x: 3.6 * s, y: 24 * s },    // 顶点
+    { x: 0.6 * s, y: 4 * s },     // 左上内角
+    { x: 12 * s, y: 4 * s },      // 右上外角
+    { x: -3.6 * s, y: -24 * s },  // 底点
+    { x: -0.6 * s, y: -4 * s },   // 右下内角
+    { x: -12 * s, y: -4 * s },    // 左下外角
   ];
+  
+  // 缩放到与原来相似的大小，放大1.8倍
+  const scale = (CONFIG.tree.height / (48 * s)) * 1.8;
 
-  return svgPoints.map((p) => {
-    const x = (p.x - svgCenter.x) * scale * widthScale; // X方向放大
-    const y = (svgCenter.y - p.y) * scale; // invert so higher y is up in 3D space
+  return demoPoints.map((p) => {
+    const x = p.x * scale;
+    const y = p.y * scale;
     return new THREE.Vector3(x, y, 0);
   });
 })();
 
-const getLightningPosition = (thickness = 2.2) => { // thickness 默认控制整体闪电粗细
+const getLightningPosition = (thickness = 4.5) => { // thickness 增大，让轮廓更柔和
   const seg = Math.floor(Math.random() * (lightningPath.length - 1));
   const t = Math.random();
   const from = lightningPath[seg];
   const to = lightningPath[seg + 1];
   const base = new THREE.Vector3().lerpVectors(from, to, t);
   base.z = 0; // keep the bolt on a thin plane
+  // 增加随机散布，柔化轮廓
   const jitter = new THREE.Vector3(
-    (Math.random() - 0.5) * thickness,
-    (Math.random() - 0.5) * (thickness * 0.08), // 减少 Y 抖动，保持段平行
-    (Math.random() - 0.5) * (thickness * 0.25) // add depth for thickness
+    (Math.random() - 0.5) * thickness + (Math.random() - 0.5) * 2,
+    (Math.random() - 0.5) * (thickness * 0.15), // 增加 Y 抖动
+    (Math.random() - 0.5) * (thickness * 0.5) // 增加深度散布
   );
   base.add(jitter);
   return [base.x, base.y, base.z] as [number, number, number];
@@ -2102,588 +2104,605 @@ const FlameParticle = ({
   );
 };
 
-// --- Component: Bolt Glow (实心填充闪电 - 粒子完全填满形状) ---
+// --- Component: Bolt Glow (完全复制demo.html的粒子闪电) ---
 const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: boolean }) => {
   const groupRef = useRef<THREE.Group>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const timeRef = useRef(0);
   const progressRef = useRef(state === 'FORMED' ? 1 : 0);
   
-  // 检测点是否在闪电多边形内部
-  const isPointInLightning = (x: number, y: number): boolean => {
-    const polygon = lightningPath.map(p => ({ x: p.x, y: p.y }));
-    let inside = false;
-    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-      const xi = polygon[i].x, yi = polygon[i].y;
-      const xj = polygon[j].x, yj = polygon[j].y;
-      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  };
-  
-  // 计算点到多边形边缘的最近距离
-  const distanceToEdge = (x: number, y: number): number => {
-    let minDist = Infinity;
-    for (let i = 0, j = lightningPath.length - 1; i < lightningPath.length; j = i++) {
-      const xi = lightningPath[i].x, yi = lightningPath[i].y;
-      const xj = lightningPath[j].x, yj = lightningPath[j].y;
-      
-      // 计算点到线段的距离
-      const dx = xj - xi;
-      const dy = yj - yi;
-      const len2 = dx * dx + dy * dy;
-      
-      let t = Math.max(0, Math.min(1, ((x - xi) * dx + (y - yi) * dy) / len2));
-      const projX = xi + t * dx;
-      const projY = yi + t * dy;
-      
-      const dist = Math.sqrt((x - projX) ** 2 + (y - projY) ** 2);
-      minDist = Math.min(minDist, dist);
-    }
-    return minDist;
-  };
-
-  // 获取闪电边界框
-  const getBounds = () => {
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    lightningPath.forEach(p => {
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    });
-    return { minX, maxX, minY, maxY };
-  };
-  
-  // 生成填充粒子数据 - 完全填满闪电形状
-  const { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds } = useMemo(() => {
-    const particleCount = 10000; // 粒子填满形状，稀疏一些
-    const positions = new Float32Array(particleCount * 3);
-    const targetPositions = new Float32Array(particleCount * 3);
-    const dispersePositions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-    const sizes = new Float32Array(particleCount);
-    const randoms = new Float32Array(particleCount);
-    const noiseSeeds = new Float32Array(particleCount * 2);
+  // 创建闪电几何体（与demo.html完全一致）
+  const lightningGeometry = useMemo(() => {
+    const s = 0.65;
+    const shape = new THREE.Shape();
+    shape.moveTo(3.6 * s, 24 * s);
+    shape.lineTo(0.6 * s, 4 * s);
+    shape.lineTo(12 * s, 4 * s);
+    shape.lineTo(-3.6 * s, -24 * s);
+    shape.lineTo(-0.6 * s, -4 * s);
+    shape.lineTo(-12 * s, -4 * s);
+    shape.lineTo(3.6 * s, 24 * s);
     
-    // 颜色渐变
-    const topColor = new THREE.Color('#80E0FF');    // 顶部青色
-    const midColor = new THREE.Color('#E0B0FF');    // 中间淡紫粉
-    const bottomColor = new THREE.Color('#FFB060'); // 底部橙色
-    const coreColor = new THREE.Color('#FFFFFF');   // 核心白色
+    const extrudeSettings = {
+      steps: 1,
+      depth: 4.0,
+      bevelEnabled: false
+    };
     
-    const bounds = getBounds();
-    const edgeSoftness = 8; // 边缘柔和区域宽度
-    
-    let idx = 0;
-    let attempts = 0;
-    const maxAttempts = particleCount * 30;
-    
-    while (idx < particleCount && attempts < maxAttempts) {
-      attempts++;
-      
-      // 扩大采样范围，允许一些粒子在边缘外形成柔和过渡
-      const expandMargin = 5;
-      const x = bounds.minX - expandMargin + Math.random() * (bounds.maxX - bounds.minX + expandMargin * 2);
-      const y = bounds.minY - expandMargin + Math.random() * (bounds.maxY - bounds.minY + expandMargin * 2);
-      
-      const isInside = isPointInLightning(x, y);
-      const edgeDist = distanceToEdge(x, y);
-      
-      // 在内部：全部接受
-      // 在外部：距离越远，接受概率越低（形成柔和边缘）
-      let acceptParticle = false;
-      let edgeFactor = 1; // 边缘因子，用于调整大小和透明度
-      
-      if (isInside) {
-        acceptParticle = true;
-        // 内部靠近边缘的粒子也稍微柔和
-        edgeFactor = Math.min(1, edgeDist / edgeSoftness);
-      } else {
-        // 外部粒子，根据距离概率接受
-        const outsideProb = Math.exp(-edgeDist / 3); // 距离越远概率越低
-        if (Math.random() < outsideProb) {
-          acceptParticle = true;
-          edgeFactor = Math.max(0.1, 1 - edgeDist / edgeSoftness);
-        }
-      }
-      
-      if (acceptParticle) {
-        // 添加深度变化 - 让闪电有立体厚度感（参考demo.html的方式）
-        // 核心思路：使用高斯分布让粒子在Z轴上连续分布，中间密集边缘稀疏
-        const typeRand = Math.random();
-        let spread = 0.6; // 基础弥散，紧凑
-        
-        if (typeRand > 0.92) {
-          // 外层光晕 (8%): 稍微松散
-          spread = 1.5;
-        } else if (typeRand > 0.80) {
-          // 过渡层 (12%): 连接核心与光晕
-          spread = 1.0;
-        }
-        
-        // 应用弥散偏移 - X和Y方向保持紧凑
-        const finalX = x + (Math.random() - 0.5) * spread;
-        const finalY = y + (Math.random() - 0.5) * spread;
-        
-        // Z轴厚度 - 使用连续分布，按照demo.html的方式: spread * 3.5
-        // 基础厚度20，再根据spread放大
-        const zThickness = 20 + spread * 3.5 * 5;
-        const z = (Math.random() - 0.5) * zThickness;
-        
-        // 目标位置
-        targetPositions[idx * 3] = finalX;
-        targetPositions[idx * 3 + 1] = finalY;
-        targetPositions[idx * 3 + 2] = z;
-        
-        // 噪声种子
-        noiseSeeds[idx * 2] = Math.random() * 100;
-        noiseSeeds[idx * 2 + 1] = Math.random() * 100;
-        
-        // 散开位置
-        const disperseRadius = 300 + Math.random() * 400;
-        const theta = Math.random() * Math.PI * 2;
-        const phi = Math.acos(2 * Math.random() - 1);
-        dispersePositions[idx * 3] = Math.sin(phi) * Math.cos(theta) * disperseRadius;
-        dispersePositions[idx * 3 + 1] = Math.sin(phi) * Math.sin(theta) * disperseRadius;
-        dispersePositions[idx * 3 + 2] = Math.cos(phi) * disperseRadius;
-        
-        // 初始位置 = 散开位置
-        positions[idx * 3] = dispersePositions[idx * 3];
-        positions[idx * 3 + 1] = dispersePositions[idx * 3 + 1];
-        positions[idx * 3 + 2] = dispersePositions[idx * 3 + 2];
-        
-        // 根据Y位置计算颜色渐变
-        const yNorm = (y - bounds.minY) / (bounds.maxY - bounds.minY);
-        let particleColor: THREE.Color;
-        
-        // 随机决定是否为核心白色
-        const isCore = Math.random() < 0.3;
-        
-        if (isCore) {
-          particleColor = coreColor.clone();
-        } else if (yNorm > 0.6) {
-          // 顶部 - 青色
-          particleColor = topColor.clone().lerp(coreColor, 0.2);
-        } else if (yNorm > 0.3) {
-          // 中间 - 淡紫粉
-          const t = (yNorm - 0.3) / 0.3;
-          particleColor = midColor.clone().lerp(topColor, t);
-        } else {
-          // 底部 - 橙色
-          const t = yNorm / 0.3;
-          particleColor = bottomColor.clone().lerp(midColor, t);
-        }
-        
-        // 根据Z位置调整颜色亮度 - 后面的粒子更暗，增加立体感
-        const zDepthFactor = 0.6 + ((z + 25) / 50) * 0.4; // 后面0.6，前面1.0
-        particleColor.multiplyScalar(zDepthFactor);
-        
-        colors[idx * 3] = particleColor.r;
-        colors[idx * 3 + 1] = particleColor.g;
-        colors[idx * 3 + 2] = particleColor.b;
-        
-        // 粒子大小 - 根据Z位置和边缘距离调整
-        const maxZSize = 25; // 最大Z值（层级范围约 -23 到 +23）
-        const zNorm = (z + maxZSize) / (maxZSize * 2); // 归一化到0-1
-        const depthSize = 0.6 + zNorm * 0.8; // 后面0.6，前面1.4
-        // 边缘的粒子更小
-        sizes[idx] = (0.8 + Math.random() * 1.0) * depthSize * (0.4 + edgeFactor * 0.6);
-        
-        // 随机值 - 根据Z和边缘调整亮度
-        const depthBrightness = 0.5 + zNorm * 0.5; // 后面0.5，前面1.0
-        // 边缘的粒子更透明
-        randoms[idx] = (0.7 + Math.random() * 0.3) * depthBrightness * (0.3 + edgeFactor * 0.7);
-        
-        idx++;
-      }
-    }
-    
-    // 填充剩余位置（如果有）
-    while (idx < particleCount) {
-      targetPositions[idx * 3] = 0;
-      targetPositions[idx * 3 + 1] = 0;
-      targetPositions[idx * 3 + 2] = 0;
-      dispersePositions[idx * 3] = (Math.random() - 0.5) * 600;
-      dispersePositions[idx * 3 + 1] = (Math.random() - 0.5) * 600;
-      dispersePositions[idx * 3 + 2] = (Math.random() - 0.5) * 600;
-      positions[idx * 3] = dispersePositions[idx * 3];
-      positions[idx * 3 + 1] = dispersePositions[idx * 3 + 1];
-      positions[idx * 3 + 2] = dispersePositions[idx * 3 + 2];
-      colors[idx * 3] = 1;
-      colors[idx * 3 + 1] = 1;
-      colors[idx * 3 + 2] = 1;
-      sizes[idx] = 0;
-      randoms[idx] = 0;
-      noiseSeeds[idx * 2] = 0;
-      noiseSeeds[idx * 2 + 1] = 0;
-      idx++;
-    }
-    
-    return { positions, targetPositions, dispersePositions, colors, sizes, randoms, noiseSeeds };
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    geometry.center();
+    return geometry;
   }, []);
   
-  // 着色器材质 - 柔和波动效果
+  // 生成粒子数据 - 直接分层，避免后续重复计算
+  const { blueLayerData, whiteLayerData } = useMemo(() => {
+    const particleCount = 90000;
+    const decorativeCount = 20000;
+    const totalCount = particleCount + decorativeCount;
+    
+    // 临时数组存储所有粒子数据
+    const tempData: Array<{
+      pos: [number, number, number];
+      target: [number, number, number];
+      disperse: [number, number, number];
+      color: [number, number, number];
+      size: number;
+      alpha: number;
+      random: number;
+      speed: number;
+      isWhite: boolean;
+    }> = [];
+    
+    const geoPos = lightningGeometry.attributes.position;
+    const vCount = geoPos.count;
+    
+    // demo.html的颜色
+    const cCore = new THREE.Color(0xffffff);
+    const cMid = new THREE.Color(0x00ffff);
+    const cEdge = new THREE.Color(0x7700ff);
+    
+    // 缩放因子 - 只用于位置，不用于粒子大小
+    const scale = (CONFIG.tree.height / 48) * 1.8;
+    
+    // 主粒子 - 完全复制demo.html
+    for (let i = 0; i < particleCount; i++) {
+      const fIdx = Math.floor(Math.random() * (vCount / 3));
+      const i1 = fIdx * 3, i2 = fIdx * 3 + 1, i3 = fIdx * 3 + 2;
+      
+      const vA = new THREE.Vector3(geoPos.getX(i1), geoPos.getY(i1), geoPos.getZ(i1));
+      const vB = new THREE.Vector3(geoPos.getX(i2), geoPos.getY(i2), geoPos.getZ(i2));
+      const vC = new THREE.Vector3(geoPos.getX(i3), geoPos.getY(i3), geoPos.getZ(i3));
+      
+      const r1 = Math.random(), r2 = Math.random();
+      const sq = Math.sqrt(r1);
+      const w1 = 1 - sq, w2 = (1 - r2) * sq, w3 = r2 * sq;
+      
+      let x = w1 * vA.x + w2 * vB.x + w3 * vC.x;
+      let y = w1 * vA.y + w2 * vB.y + w3 * vC.y;
+      let z = w1 * vA.z + w2 * vB.z + w3 * vC.z;
+      
+      // 【优化层次感】弥散效果 - 核心更紧凑，边缘更松散
+      const typeRand = Math.random();
+      let spread = 1.0;
+      
+      // 先计算未弥散的中轴距离（用于判断白色粒子）
+      const rawAxisDist = Math.sqrt(x * x * 0.5 + z * z);
+      // 保存原始位置用于判断中轴线
+      const rawX = x;
+      const rawY = y;
+      const rawZ = z;
+      
+      // 计算闪电中轴线的期望 x 位置（根据 y 线性插值）
+      // 闪电从顶部 (y=15.6, x=2.34) 到底部 (y=-15.6, x=-2.34)，居中后大约是这个关系
+      // 简化：expectedX = rawY * (3.6 / 24) = rawY * 0.15
+      const expectedX = rawY * 0.15;
+      // 计算粒子离中轴线的距离（考虑闪电斜度）
+      const distFromAxis = Math.sqrt((rawX - expectedX) * (rawX - expectedX) + rawZ * rawZ);
+      
+      if (rawAxisDist < 2.0) {
+        // 核心区域：非常紧凑，几乎不弥散
+        spread = 0.3;
+      } else if (rawAxisDist < 4.0) {
+        // 过渡区域：轻微弥散
+        spread = 0.5 + (rawAxisDist - 2.0) * 0.25;
+      } else if (typeRand > 0.92) {
+        spread = 4.0;
+      } else if (typeRand > 0.78) {
+        spread = 2.0;
+      }
+      
+      x += (Math.random() - 0.5) * spread;
+      y += (Math.random() - 0.5) * spread;
+      z += (Math.random() - 0.5) * spread * 2.5;
+      
+      const dist = Math.sqrt(x * x + z * z * 2.5) / 10.0;
+      const axisDist = Math.sqrt(x * x * 0.5 + z * z);
+      
+      x *= scale;
+      y *= scale;
+      z *= scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      let color = new THREE.Color();
+      let baseAlpha = 1.0;
+      
+      // 使用原始位置判断中轴线（弥散前的 x 和 z）
+      const rawHorizontalDist = Math.sqrt(rawX * rawX + rawZ * rawZ);
+      
+      // 核心中轴线区域：竖着的白色粒子线
+      if (rawHorizontalDist < 1.5) {
+        // 核心中轴线：纯白色，降低透明度
+        color.copy(cCore);
+        baseAlpha = 0.7 + Math.random() * 0.2;
+      } else if (rawHorizontalDist < 2.5) {
+        // 过渡区域：竖着的白色到青色渐变
+        const t = (rawHorizontalDist - 1.5) / 1.0;
+        color.lerpColors(cCore, cMid, t * 0.5);
+        baseAlpha = 0.6 + Math.random() * 0.2;
+      } else if (typeRand > 0.85) {
+        color.copy(cCore);
+        baseAlpha = 0.08 + Math.random() * 0.12;
+      } else if (typeRand > 0.65) {
+        color.lerpColors(cCore, cMid, 0.5);
+        baseAlpha = 0.3 + Math.random() * 0.4;
+      } else {
+        if (dist < 0.25) {
+          const t = Math.min(1.0, dist * 4.0);
+          color.lerpColors(cCore, cMid, t);
+        } else {
+          const t = Math.min(1.0, (dist - 0.25) * 1.5);
+          color.lerpColors(cMid, cEdge, t);
+        }
+        baseAlpha = 1.0;
+      }
+      
+      let baseSize = 0.0;
+      
+      // 核心区域粒子更大
+      if (distFromAxis < 1.5) {
+        // 核心中轴线：大粒子
+        baseSize = 0.8 + Math.random() * 0.6;
+      } else if (distFromAxis < 2.5) {
+        // 过渡区域：中等大小
+        baseSize = 0.5 + Math.random() * 0.5;
+      } else if (typeRand > 0.92) {
+        baseSize = 0.2 + Math.random() * 0.3;
+      } else if (typeRand > 0.78) {
+        baseSize = 0.3 + Math.random() * 0.4;
+      } else {
+        const sizeR = Math.random();
+        if (sizeR < 0.8) {
+          baseSize = 0.1 + sizeR * 0.4;
+        } else if (sizeR < 0.96) {
+          baseSize = 0.5 + (sizeR - 0.8) * 2.5;
+        } else {
+          if (axisDist < 3.0) {
+            baseSize = 0.8 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 1.5;
+            color.copy(cCore);
+            baseAlpha = 1.0;
+          } else {
+            baseSize = 0.4;
+          }
+        }
+      }
+      
+      const brightness = (color.r + color.g + color.b) / 3.0;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [color.r, color.g, color.b],
+        size: baseSize,
+        alpha: baseAlpha,
+        random: Math.random(),
+        speed: 0.5 + Math.random() * 1.5,
+        isWhite: brightness > 0.85
+      });
+    }
+    
+    // 装饰性白色粒子
+    for (let i = particleCount; i < totalCount; i++) {
+      const fIdx = Math.floor(Math.random() * (vCount / 3));
+      const i1 = fIdx * 3, i2 = fIdx * 3 + 1, i3 = fIdx * 3 + 2;
+      
+      const vA = new THREE.Vector3(geoPos.getX(i1), geoPos.getY(i1), geoPos.getZ(i1));
+      const vB = new THREE.Vector3(geoPos.getX(i2), geoPos.getY(i2), geoPos.getZ(i2));
+      const vC = new THREE.Vector3(geoPos.getX(i3), geoPos.getY(i3), geoPos.getZ(i3));
+      
+      const r1 = Math.random(), r2 = Math.random();
+      const sq = Math.sqrt(r1);
+      const w1 = 1 - sq, w2 = (1 - r2) * sq, w3 = r2 * sq;
+      
+      let x = w1 * vA.x + w2 * vB.x + w3 * vC.x;
+      let y = w1 * vA.y + w2 * vB.y + w3 * vC.y;
+      let z = w1 * vA.z + w2 * vB.z + w3 * vC.z;
+      
+      const nearSpread = 1.5 + Math.random() * 2.0;
+      x += (Math.random() - 0.5) * nearSpread;
+      y += (Math.random() - 0.5) * nearSpread;
+      z += (Math.random() - 0.5) * nearSpread * 2.0;
+      
+      x *= scale;
+      y *= scale;
+      z *= scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [1.0, 1.0, 1.0],
+        size: 0.15 + Math.random() * 0.25,
+        alpha: 0.2 + Math.random() * 0.3,
+        random: Math.random(),
+        speed: 0.3 + Math.random() * 0.8,
+        isWhite: true
+      });
+    }
+    
+    // 分层
+    const blueParticles = tempData.filter(p => !p.isWhite);
+    const whiteParticles = tempData.filter(p => p.isWhite);
+    
+    const createLayerData = (particles: typeof tempData) => {
+      const count = particles.length;
+      const positions = new Float32Array(count * 3);
+      const targetPositions = new Float32Array(count * 3);
+      const dispersePositions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+      const alphas = new Float32Array(count);
+      const randoms = new Float32Array(count);
+      const speeds = new Float32Array(count);
+      
+      for (let i = 0; i < count; i++) {
+        const p = particles[i];
+        positions[i * 3] = p.pos[0];
+        positions[i * 3 + 1] = p.pos[1];
+        positions[i * 3 + 2] = p.pos[2];
+        targetPositions[i * 3] = p.target[0];
+        targetPositions[i * 3 + 1] = p.target[1];
+        targetPositions[i * 3 + 2] = p.target[2];
+        dispersePositions[i * 3] = p.disperse[0];
+        dispersePositions[i * 3 + 1] = p.disperse[1];
+        dispersePositions[i * 3 + 2] = p.disperse[2];
+        colors[i * 3] = p.color[0];
+        colors[i * 3 + 1] = p.color[1];
+        colors[i * 3 + 2] = p.color[2];
+        sizes[i] = p.size;
+        alphas[i] = p.alpha;
+        randoms[i] = p.random;
+        speeds[i] = p.speed;
+      }
+      
+      return { positions, targetPositions, dispersePositions, colors, sizes, alphas, randoms, speeds };
+    };
+    
+    return {
+      blueLayerData: createLayerData(blueParticles),
+      whiteLayerData: createLayerData(whiteParticles)
+    };
+  }, [lightningGeometry]);
+  
+  // 创建粒子纹理 - 更锐利的边缘，让闪电更清晰
+  const particleTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    // 更锐利的渐变：核心更实，边缘更快衰减
+    gradient.addColorStop(0, 'rgba(255,255,255,1)');
+    gradient.addColorStop(0.15, 'rgba(255,255,255,1)');  // 核心保持实心更久
+    gradient.addColorStop(0.4, 'rgba(255,255,255,0.7)');
+    gradient.addColorStop(0.6, 'rgba(255,255,255,0.3)');
+    gradient.addColorStop(0.8, 'rgba(255,255,255,0.1)');
+    gradient.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+  
+  // 着色器材质 - 完全复制demo.html
   const shaderMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uProgress: { value: 0 },
-        uIsMobile: { value: 0 }, // 移动端标记
+        uFlashTime: { value: 0 },
+        uTex: { value: particleTexture },
       },
       vertexShader: `
         attribute vec3 aTargetPos;
         attribute vec3 aDispersePos;
-        attribute vec2 aNoiseSeed;
         attribute float aSize;
+        attribute float aAlpha;
         attribute float aRandom;
+        attribute float aSpeed;
         
         uniform float uTime;
         uniform float uProgress;
-        uniform float uIsMobile;
         
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vRand;
+        varying vec3 vPos;
+        varying float vEasedMix;
         
-        // 简单噪声函数
-        float noise(float x) {
-          return fract(sin(x * 12.9898) * 43758.5453);
-        }
-        
-        float smoothNoise(float x) {
-          float i = floor(x);
-          float f = fract(x);
-          return mix(noise(i), noise(i + 1.0), f * f * (3.0 - 2.0 * f));
-        }
-        
-        float cubicInOut(float t) {
-          return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
+        // easeOutQuart - 让散开更有爆发感（与 code-2.html 一致）
+        float easeOutQuart(float x) {
+          return 1.0 - pow(1.0 - x, 4.0);
         }
         
         void main() {
-          vColor = color;
+          vRand = aRandom;
           
-          float t = cubicInOut(uProgress);
+          // 使用 easeOutQuart 缓动，让散开更有爆发感
+          float localMix = clamp(uProgress * 1.2 - aRandom * 0.2, 0.0, 1.0);
+          float easedMix = easeOutQuart(localMix);
+          vEasedMix = easedMix;
           
-          // 在聚合和散开位置之间插值
-          vec3 finalPos = mix(aDispersePos, aTargetPos, t);
+          // 在散开和聚合位置之间插值（注意：progress=1 是聚合态）
+          vec3 originalPos = aTargetPos;
+          vec3 targetPos = aDispersePos;
+          vec3 pos = mix(originalPos, targetPos, 1.0 - easedMix);
+          vPos = pos;
           
-          // 柔和的波动效果 - 让边缘有流动感
-          float waveSpeed = 0.8;
-          float waveAmount = t * 2.0;
+          // 电流强度 - 聚合时更强
+          float electricIntensity = easedMix;
           
-          // 多层波动叠加，产生自然的流体感
-          float wave1 = sin(uTime * waveSpeed + aNoiseSeed.x) * 0.8;
-          float wave2 = sin(uTime * waveSpeed * 1.3 + aNoiseSeed.y) * 0.5;
-          float wave3 = sin(uTime * waveSpeed * 0.7 + aNoiseSeed.x * 0.5) * 0.3;
+          // 电流窜动效果 - 多层波动叠加
+          float electricFlow = sin(uTime * 8.0 + originalPos.y * 2.0 + aRandom * 6.28) * 0.5 + 0.5;
+          electricFlow *= sin(uTime * 5.0 - originalPos.y * 1.5 + aRandom * 3.14) * 0.5 + 0.5;
           
-          finalPos.x += (wave1 + wave2) * waveAmount;
-          finalPos.y += (wave2 + wave3) * waveAmount * 0.6;
-          finalPos.z += wave3 * waveAmount;
+          // 能量波 - 从上到下流动的脉冲，加入相位偏移让波纹提前
+          float wavePhase = uTime * 3.0 - originalPos.y * 0.15 + 1.57; // 加90度相位偏移
+          float energyWave = sin(wavePhase) * 0.5 + 0.5;
+          energyWave = pow(energyWave, 2.0); // 让波峰更尖锐
           
-          // 散开时的飘动 - 移动端禁用
-          if (uIsMobile < 0.5) {
-            float wobble = sin(uTime * 2.0 + aNoiseSeed.x * 0.1) * (1.0 - t) * 3.0;
-            finalPos.x += wobble;
-            finalPos.y += cos(uTime * 1.5 + aNoiseSeed.y * 0.1) * (1.0 - t) * 2.0;
+          float distFromCenter = length(originalPos.xz);
+          float coreIntensity = smoothstep(4.0, 0.5, distFromCenter);
+          electricFlow *= coreIntensity * electricIntensity;
+          
+          // 微小的位移，制造电流"跳动"感
+          pos.x += (electricFlow - 0.25) * 0.2;
+          pos.z += (electricFlow - 0.25) * 0.12;
+          // 能量波带来的额外位移
+          pos.x += energyWave * 0.1 * electricIntensity * (aRandom - 0.5);
+          pos.y += energyWave * 0.05 * electricIntensity;
+          
+          // 动态游动
+          float t = uTime * aSpeed;
+          float floatScale = 0.3;
+          if (easedMix > 0.5) floatScale = 0.5;
+          
+          float moveX = sin(t * 0.5 + aRandom * 10.0) * floatScale;
+          float moveY = cos(t * 0.3 + aRandom * 20.0) * floatScale;
+          float moveZ = sin(t * 0.4 + pos.y) * floatScale;
+          pos += vec3(moveX, moveY, moveZ);
+          
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          
+          // 粒子大小 - 中心大，边缘正常
+          float sizePulse = 1.0 + electricFlow * 0.3;
+          
+          // 中轴线距离（注意：originalPos 是缩放后的坐标）
+          float axisDist = sqrt(originalPos.x * originalPos.x * 0.5 + originalPos.z * originalPos.z);
+          
+          // 中心粒子放大，边缘粒子保持原大小
+          float centerSizeBoost;
+          if (axisDist < 8.0) {
+            // 核心区域：大幅放大（4.0-6.0倍）
+            centerSizeBoost = 4.0 + (1.0 - axisDist / 8.0) * 2.0;
+          } else if (axisDist < 20.0) {
+            // 过渡区域：中等放大（1.0-4.0倍）
+            centerSizeBoost = 1.0 + (1.0 - (axisDist - 8.0) / 12.0) * 3.0;
+          } else {
+            // 边缘区域：保持原大小
+            centerSizeBoost = 1.0;
           }
           
-          // 柔和的闪烁
-          float flicker = 0.9 + sin(uTime * 4.0 + aNoiseSeed.x) * 0.1 * t;
+          float finalSize = aSize * sizePulse * centerSizeBoost;
           
-          // aRandom 存储了 alphaMultiplier - 提高整体亮度
-          vAlpha = mix(0.5, 1.2, t) * flicker * (aRandom * 0.4 + 0.6);
+          if (easedMix > 0.5) {
+            finalSize = aSize * 1.5 * centerSizeBoost;
+          }
           
-          vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-          gl_PointSize = aSize * (1.0 + t * 0.3) * (350.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
+          gl_PointSize = finalSize * (220.0 / -mvPosition.z);
+          
+          if (easedMix > 0.8) {
+            gl_PointSize = max(gl_PointSize, 2.0);
+          }
+          
+          // 颜色 - 直接使用原有颜色，不做额外的白色渐变
+          // 让颜色由 JS 端控制（已经根据距离设置了白-青-紫渐变）
+          float colorBoost = 1.0 + electricFlow * 0.15; // 降低增益
+          vColor = mix(color * colorBoost, vec3(1.0), 1.0 - easedMix);
+          
+          float starAlpha = aAlpha + 0.3;
+          vAlpha = mix(aAlpha * (1.0 + energyWave * 0.2), starAlpha, 1.0 - easedMix);
         }
       `,
       fragmentShader: `
-        uniform float uTime;
+        uniform sampler2D uTex;
+        uniform float uFlashTime;
+        uniform float uProgress;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vRand;
+        varying vec3 vPos;
+        varying float vEasedMix;
         
         void main() {
-          float r = distance(gl_PointCoord, vec2(0.5));
-          if (r > 0.5) discard;
+          // 使用纹理贴图
+          vec4 t = texture2D(uTex, gl_PointCoord);
+          if (t.a < 0.01) discard;
           
-          // 更亮的发光效果
-          float glow = 1.0 - r * 2.0;
-          glow = pow(glow, 0.3); // 更亮的衰减
+          // 判断粒子是偏白还是偏蓝（通过颜色亮度）
+          float brightness = (vColor.r + vColor.g + vColor.b) / 3.0;
+          float whiteMask = smoothstep(0.6, 1.0, brightness); // 1=白色粒子, 0=蓝色粒子
           
-          // 强化的光晕
-          float softGlow = exp(-r * 0.8);
+          // 呼吸闪烁效果 - 参考 code-2.html
+          float breathCycle = sin(uFlashTime * 0.8) * 0.5 + 0.5;
+          float localBreath = sin(uFlashTime * 0.8 + vRand * 3.14) * 0.5 + 0.5;
+          float breathIntensity = mix(breathCycle, localBreath, 0.3);
           
-          // === 白蓝色呼吸闪烁效果（仿demo.html） ===
-          // 全局呼吸：缓慢的一亮一暗
-          float breathCycle = sin(uTime * 1.2) * 0.5 + 0.5; // 0-1循环，加快一点
+          // 散开时的星星闪烁效果
+          if (vEasedMix < 0.5) {
+            float starTwinkle = sin(uFlashTime * 2.0 + vRand * 10.0) * 0.5 + 0.5;
+            breathIntensity = 0.8 + starTwinkle * 0.4;
+          } else {
+            // 聚合态：降低白色粒子亮度，呼吸幅度适中
+            // 白色粒子：0.7-1.3 范围（降低过曝）
+            // 蓝色粒子：0.85-1.15 范围
+            float whiteBreath = 0.7 + breathIntensity * 0.6;
+            float blueBreath = 0.85 + breathIntensity * 0.3;
+            breathIntensity = mix(blueBreath, whiteBreath, whiteMask);
+          }
           
-          // 白色和蓝色之间变换
-          vec3 whiteColor = vec3(1.0, 1.0, 1.0);
-          vec3 blueColor = vec3(0.4, 0.6, 1.0);
+          vec3 finalColor = vColor * breathIntensity;
+          float finalAlpha = vAlpha;
           
-          // 基础颜色混合：呼吸时在白色和蓝色之间切换
-          vec3 breathColor = mix(blueColor, whiteColor, breathCycle);
+          // 聚合态透明度参与呼吸（幅度减小）
+          if (vEasedMix > 0.5) {
+            float alphaBreath = mix(1.0, breathIntensity, whiteMask * 0.3);
+            finalAlpha *= alphaBreath;
+          }
           
-          // 与原始颜色混合（保留一些原始色调）
-          vec3 mixedColor = mix(vColor, breathColor, 0.7);
-          
-          // 亮度呼吸
-          float finalBreath = 0.8 + breathCycle * 0.6;
-          
-          vec3 finalColor = mixedColor * (2.2 + softGlow * 1.2) * finalBreath;
-          float finalAlpha = vAlpha * glow * 2.5 * finalBreath;
-          
-          gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
+          gl_FragColor = vec4(finalColor, finalAlpha * t.a);
         }
       `,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
       vertexColors: true,
     });
-  }, []);
+  }, [particleTexture]);
+  
+  // 缓存 whiteShaderMaterial 的引用，避免在 useFrame 中每次查找
+  const whiteMatRef = useRef<THREE.ShaderMaterial | null>(null);
   
   useFrame((stateObj, delta) => {
-    timeRef.current = stateObj.clock.elapsedTime;
+    const time = stateObj.clock.elapsedTime;
+    timeRef.current = time;
     const isFormed = state === 'FORMED';
     const targetProgress = isFormed ? 1 : 0;
     
-    // 平滑过渡
     progressRef.current = MathUtils.damp(progressRef.current, targetProgress, 3, delta);
+    const progress = progressRef.current;
     
-    shaderMaterial.uniforms.uTime.value = timeRef.current;
-    shaderMaterial.uniforms.uProgress.value = progressRef.current;
-    shaderMaterial.uniforms.uIsMobile.value = isMobile ? 1 : 0;
+    // 更新蓝色粒子材质
+    shaderMaterial.uniforms.uTime.value = time;
+    shaderMaterial.uniforms.uProgress.value = progress;
+    shaderMaterial.uniforms.uFlashTime.value = time;
+    
+    // 同时更新白色粒子材质（合并到一个 useFrame 中）
+    if (whiteMatRef.current) {
+      whiteMatRef.current.uniforms.uTime.value = time;
+      whiteMatRef.current.uniforms.uProgress.value = progress;
+      whiteMatRef.current.uniforms.uFlashTime.value = time;
+    }
   });
   
-  return (
-    <group ref={groupRef}>
-      <points ref={pointsRef} material={shaderMaterial}>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-          <bufferAttribute attach="attributes-aTargetPos" args={[targetPositions, 3]} />
-          <bufferAttribute attach="attributes-aDispersePos" args={[dispersePositions, 3]} />
-          <bufferAttribute attach="attributes-aNoiseSeed" args={[noiseSeeds, 2]} />
-          <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-          <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
-          <bufferAttribute attach="attributes-aRandom" args={[randoms, 1]} />
-        </bufferGeometry>
-      </points>
-    </group>
-  );
-};
-
-// --- Component: Spiral Ribbon (螺旋丝带 - 金属质感粒子) ---
-const SpiralRibbon = ({ state }: { state: 'CHAOS' | 'FORMED' }) => {
-  const pointsRef = useRef<THREE.Points>(null);
-  const timeRef = useRef(0);
-  const progressRef = useRef(state === 'FORMED' ? 1 : 0);
-  
-  // 螺旋参数
-  const spiralTurns = 4.5;
-  const minHeight = -100;
-  const maxHeight = 80;
-  const heightRange = maxHeight - minHeight;
-  
-  // 生成螺旋丝带粒子
-  const { positions, dispersePositions, colors, sizes, alphas, tParams, widthOffsets, thicknessOffsets } = useMemo(() => {
-    const particleCount = 3000;
-    
-    const positions = new Float32Array(particleCount * 3);
-    const dispersePositions = new Float32Array(particleCount * 3);
-    const colors = new Float32Array(particleCount * 3);
-    const sizes = new Float32Array(particleCount);
-    const alphas = new Float32Array(particleCount);
-    const tParams = new Float32Array(particleCount); // 记录每个粒子在螺旋上的位置
-    const widthOffsets = new Float32Array(particleCount); // 记录宽度偏移（半径方向）
-    const thicknessOffsets = new Float32Array(particleCount); // 记录厚度偏移（高度方向）
-    
-    // 金属色渐变 - 更白的色调
-    const goldColor = new THREE.Color('#E8E8E0');
-    const roseGoldColor = new THREE.Color('#D4D4CC');
-    const whiteColor = new THREE.Color('#FFFFFF');
-    
-    for (let i = 0; i < particleCount; i++) {
-      const t = i / particleCount; // 0 到 1
-      tParams[i] = t;
-      
-      // 丝带宽度方向的偏移
-      const ribbonWidth = 14;
-      const widthOffset = (Math.random() - 0.5) * ribbonWidth;
-      widthOffsets[i] = widthOffset;
-      
-      // 丝带厚度方向的偏移（高度方向）
-      const ribbonThickness = 6;
-      const thicknessOffset = (Math.random() - 0.5) * ribbonThickness;
-      thicknessOffsets[i] = thicknessOffset;
-      
-      // 散开位置
-      const disperseRadius = 200 + Math.random() * 300;
-      const disperseTheta = Math.random() * Math.PI * 2;
-      const dispersePhi = Math.acos(2 * Math.random() - 1);
-      dispersePositions[i * 3] = Math.sin(dispersePhi) * Math.cos(disperseTheta) * disperseRadius;
-      dispersePositions[i * 3 + 1] = Math.sin(dispersePhi) * Math.sin(disperseTheta) * disperseRadius;
-      dispersePositions[i * 3 + 2] = Math.cos(dispersePhi) * disperseRadius;
-      
-      // 初始位置 = 散开位置
-      positions[i * 3] = dispersePositions[i * 3];
-      positions[i * 3 + 1] = dispersePositions[i * 3 + 1];
-      positions[i * 3 + 2] = dispersePositions[i * 3 + 2];
-      
-      // 金属质感颜色
-      const angle = t * spiralTurns * Math.PI * 2;
-      const colorMix = (Math.sin(angle * 2) + 1) / 2;
-      let particleColor = goldColor.clone().lerp(roseGoldColor, colorMix * 0.5);
-      
-      // 添加高光效果
-      const highlightIntensity = Math.pow(Math.abs(Math.sin(angle * 3 + t * 5)), 3);
-      particleColor.lerp(whiteColor, highlightIntensity * 0.6);
-      
-      colors[i * 3] = particleColor.r;
-      colors[i * 3 + 1] = particleColor.g;
-      colors[i * 3 + 2] = particleColor.b;
-      
-      // 粒子大小
-      const centerDist = Math.abs(widthOffset) / (ribbonWidth / 2);
-      sizes[i] = (1.2 - centerDist * 0.6) * (0.8 + Math.random() * 0.4);
-      
-      // 透明度
-      const edgeFade = 1 - centerDist * 0.5;
-      alphas[i] = edgeFade * (0.6 + Math.random() * 0.4);
-    }
-    
-    return { positions, dispersePositions, colors, sizes, alphas, tParams, widthOffsets, thicknessOffsets };
-  }, []);
-  
-  // 着色器材质 - 金属质感 + 流动效果
-  const shaderMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
+  // 创建白色粒子专用材质（降低亮度）
+  const whiteShaderMaterial = useMemo(() => {
+    const mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
         uProgress: { value: 0 },
-        uSpiralTurns: { value: spiralTurns },
-        uMinHeight: { value: minHeight },
-        uHeightRange: { value: heightRange },
+        uFlashTime: { value: 0 },
+        uTex: { value: particleTexture },
       },
-      vertexShader: `
-        attribute vec3 aDispersePos;
-        attribute float aSize;
-        attribute float aAlpha;
-        attribute float aTParam;
-        attribute float aWidthOffset;
-        attribute float aThicknessOffset;
-        
-        uniform float uTime;
-        uniform float uProgress;
-        uniform float uSpiralTurns;
-        uniform float uMinHeight;
-        uniform float uHeightRange;
-        
-        varying vec3 vColor;
-        varying float vAlpha;
-        
-        float cubicInOut(float t) {
-          return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
-        }
-        
-        void main() {
-          vColor = color;
-          
-          float progress = cubicInOut(uProgress);
-          
-          // 流动效果 - t随时间变化，形成向上流动
-          float flowSpeed = 0.02; // 流动速度，更慢
-          float flowingT = mod(aTParam + uTime * flowSpeed, 1.0);
-          
-          // 根据流动的t计算螺旋位置
-          float height = uMinHeight + flowingT * uHeightRange + aThicknessOffset;
-          float angle = flowingT * uSpiralTurns * 6.28318; // 2*PI
-          
-          // 半径随高度变化 - 更宽松的环绕
-          float baseRadius = 60.0 - flowingT * 25.0;
-          float radius = baseRadius + aWidthOffset;
-          
-          // 计算目标位置
-          vec3 targetPos;
-          targetPos.x = cos(angle) * radius;
-          targetPos.y = height;
-          targetPos.z = sin(angle) * radius;
-          
-          // 插值位置
-          vec3 finalPos = mix(aDispersePos, targetPos, progress);
-          
-          // 底部淡入效果
-          float bottomFade = smoothstep(0.0, 0.15, flowingT);
-          // 顶部淡出效果
-          float topFade = smoothstep(1.0, 0.85, flowingT);
-          float fadeFactor = bottomFade * topFade;
-          
-          // 金属闪烁效果
-          float shimmer = 0.9 + sin(uTime * 3.0 + angle * 2.0) * 0.1;
-          
-          vAlpha = aAlpha * progress * shimmer * fadeFactor * 1.5;
-          
-          vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-          gl_PointSize = aSize * (1.0 + progress * 0.3) * shimmer * fadeFactor * (320.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
+      vertexShader: shaderMaterial.vertexShader,
       fragmentShader: `
+        uniform sampler2D uTex;
+        uniform float uFlashTime;
+        uniform float uProgress;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vRand;
+        varying vec3 vPos;
+        varying float vEasedMix;
         
         void main() {
-          float r = distance(gl_PointCoord, vec2(0.5));
-          if (r > 0.5) discard;
+          vec4 t = texture2D(uTex, gl_PointCoord);
+          if (t.a < 0.01) discard;
           
-          // 金属质感 - 中心亮，边缘柔和
-          float glow = 1.0 - r * 2.0;
-          glow = pow(glow, 0.4);
+          float breathIntensity;
           
-          // 金属高光 - 更亮
-          float highlight = pow(glow, 2.0) * 0.8;
+          if (vEasedMix < 0.5) {
+            // 散开态：星星闪烁（保持个体差异）
+            float starTwinkle = sin(uFlashTime * 1.0 + vRand * 10.0) * 0.5 + 0.5;
+            breathIntensity = 0.8 + starTwinkle * 0.4;
+          } else {
+            // 聚合态：整体同步呼吸，所有白色粒子一起明暗
+            // 主呼吸周期 - 放慢到 0.6（约 10 秒一个周期）
+            float mainBreath = sin(uFlashTime * 0.6) * 0.5 + 0.5;
+            // 只加一点点个体差异（5%），保持整体同步感
+            float tinyVariation = sin(uFlashTime * 0.6 + vRand * 0.5) * 0.05;
+            // 提高最低亮度到 0.55，避免"挖空"感
+            breathIntensity = 0.55 + (mainBreath + tinyVariation) * 0.7; // 0.55-1.25 范围
+          }
           
-          vec3 finalColor = vColor * (1.5 + highlight);
-          float finalAlpha = vAlpha * glow * 1.3;
+          vec3 finalColor = vColor * breathIntensity;
+          float finalAlpha = vAlpha * (0.6 + breathIntensity * 0.4); // 透明度呼吸幅度减小
           
-          gl_FragColor = vec4(finalColor, min(finalAlpha, 1.0));
+          gl_FragColor = vec4(finalColor, finalAlpha * t.a);
         }
       `,
       transparent: true,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
       vertexColors: true,
     });
-  }, [spiralTurns, minHeight, heightRange]);
-  
-  useFrame((stateObj, delta) => {
-    timeRef.current = stateObj.clock.elapsedTime;
-    const isFormed = state === 'FORMED';
-    const targetProgress = isFormed ? 1 : 0;
-    
-    progressRef.current = MathUtils.damp(progressRef.current, targetProgress, 2.5, delta);
-    
-    shaderMaterial.uniforms.uTime.value = timeRef.current;
-    shaderMaterial.uniforms.uProgress.value = progressRef.current;
-  });
+    // 保存引用供 useFrame 使用
+    whiteMatRef.current = mat;
+    return mat;
+  }, [particleTexture, shaderMaterial.vertexShader]);
   
   return (
-    <points ref={pointsRef} material={shaderMaterial}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-aDispersePos" args={[dispersePositions, 3]} />
-        <bufferAttribute attach="attributes-color" args={[colors, 3]} />
-        <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
-        <bufferAttribute attach="attributes-aAlpha" args={[alphas, 1]} />
-        <bufferAttribute attach="attributes-aTParam" args={[tParams, 1]} />
-        <bufferAttribute attach="attributes-aWidthOffset" args={[widthOffsets, 1]} />
-        <bufferAttribute attach="attributes-aThicknessOffset" args={[thicknessOffsets, 1]} />
-      </bufferGeometry>
-    </points>
+    <group ref={groupRef}>
+      {/* 底层：蓝色/青色粒子 */}
+      <points ref={pointsRef} material={shaderMaterial} renderOrder={0}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[blueLayerData.positions, 3]} />
+          <bufferAttribute attach="attributes-aTargetPos" args={[blueLayerData.targetPositions, 3]} />
+          <bufferAttribute attach="attributes-aDispersePos" args={[blueLayerData.dispersePositions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[blueLayerData.colors, 3]} />
+          <bufferAttribute attach="attributes-aSize" args={[blueLayerData.sizes, 1]} />
+          <bufferAttribute attach="attributes-aAlpha" args={[blueLayerData.alphas, 1]} />
+          <bufferAttribute attach="attributes-aRandom" args={[blueLayerData.randoms, 1]} />
+          <bufferAttribute attach="attributes-aSpeed" args={[blueLayerData.speeds, 1]} />
+        </bufferGeometry>
+      </points>
+      {/* 顶层：白色核心粒子 */}
+      <points material={whiteShaderMaterial} renderOrder={1}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[whiteLayerData.positions, 3]} />
+          <bufferAttribute attach="attributes-aTargetPos" args={[whiteLayerData.targetPositions, 3]} />
+          <bufferAttribute attach="attributes-aDispersePos" args={[whiteLayerData.dispersePositions, 3]} />
+          <bufferAttribute attach="attributes-color" args={[whiteLayerData.colors, 3]} />
+          <bufferAttribute attach="attributes-aSize" args={[whiteLayerData.sizes, 1]} />
+          <bufferAttribute attach="attributes-aAlpha" args={[whiteLayerData.alphas, 1]} />
+          <bufferAttribute attach="attributes-aRandom" args={[whiteLayerData.randoms, 1]} />
+          <bufferAttribute attach="attributes-aSpeed" args={[whiteLayerData.speeds, 1]} />
+        </bufferGeometry>
+      </points>
+    </group>
   );
 };
 
@@ -5398,9 +5417,6 @@ const Experience = ({
   // 惯性速度
   const velocityX = useRef(0);
   const velocityY = useRef(0);
-  // 闪电旋转速度
-  const boltVelocityY = useRef(0);
-  const boltSmoothedSpeed = useRef(0);
 
   // Auto-spin when dispersed; gesture can add/subtract spin (只允许水平旋转)
   useFrame((_, delta) => {
@@ -5434,23 +5450,15 @@ const Experience = ({
       }
     }
     
-    // 闪电组旋转 - 只用鼠标控制，不自动旋转
+    // 闪电组旋转 - 与 demo.html 完全一致：只有自动摆动 ±50度
     if (boltGroupRef.current) {
-      // 平滑插值手势输入
-      boltSmoothedSpeed.current = MathUtils.lerp(boltSmoothedSpeed.current, rotationSpeed, 0.15);
+      // 自动摆动：在 ±50度 范围内用 sin 函数摆动
+      const maxAngle = Math.PI * 50 / 180; // 50度
+      const swingSpeed = 0.5; // 摆动速度
+      const time = performance.now() / 1000;
       
-      const targetVel = boltSmoothedSpeed.current * 6;
-      const friction = 0.97;
-      
-      if (Math.abs(rotationSpeed) > 0.003) {
-        boltVelocityY.current = MathUtils.lerp(boltVelocityY.current, targetVel, 0.25);
-      } else {
-        boltVelocityY.current *= friction;
-      }
-      
-      // 只有手势控制，没有自动旋转
-      const autoRotation = -0.15; // 缓慢自转，负值向左转
-      boltGroupRef.current.rotation.y += (boltVelocityY.current + autoRotation) * delta;
+      // 每帧直接设置旋转角度，与 demo.html 一模一样
+      boltGroupRef.current.rotation.y = Math.sin(time * swingSpeed) * maxAngle;
     }
   });
 
@@ -5463,8 +5471,6 @@ const Experience = ({
       // 重置闪电组旋转到初始状态
       if (boltGroupRef.current) {
         boltGroupRef.current.rotation.set(0, 0, 0);
-        boltVelocityY.current = 0;
-        boltSmoothedSpeed.current = 0;
       }
     }
   }, [sceneState]);
@@ -5569,14 +5575,11 @@ const Experience = ({
         </>
       )}
 
-      {/* 闪电背景蓝色雾气 */}
-      <LightningAura state={sceneState} />
+      {/* 闪电背景蓝色雾气 - 已移除，保持清晰效果 */}
+      {/* <LightningAura state={sceneState} /> */}
       
-      {/* 闪电旋转组 - 包含闪电和丝带，可以用鼠标拖动旋转 */}
+      {/* 闪电旋转组 - 包含闪电，可以用鼠标拖动旋转 */}
       <group ref={boltGroupRef}>
-        {/* 螺旋丝带 */}
-        <SpiralRibbon state={sceneState} />
-        
         {/* 闪电效果 */}
         <BoltGlow state={sceneState} />
       </group>
@@ -5936,12 +5939,12 @@ export default function GrandTreeApp() {
 
 
       {/* UI - Buttons */}
-      <div style={{ position: 'absolute', bottom: isMobile ? '20px' : '30px', right: isMobile ? '20px' : '40px', zIndex: 10, display: 'flex', gap: isMobile ? '8px' : '10px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', width: isMobile ? '180px' : 'auto' }}>
-        <button onClick={() => setDebugMode(!debugMode)} style={{ width: isMobile ? '100%' : 'auto', padding: '12px 15px', backgroundColor: debugMode ? '#FFD700' : 'rgba(0,0,0,0.5)', border: '1px solid #FFD700', color: debugMode ? '#000' : '#FFD700', fontFamily: 'sans-serif', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-           {debugMode ? 'HIDE DEBUG' : '🛠 DEBUG'}
+      <div style={{ position: 'absolute', bottom: isMobile ? '20px' : '30px', right: isMobile ? '20px' : '40px', zIndex: 10, display: 'flex', gap: isMobile ? '10px' : '12px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', width: isMobile ? '140px' : 'auto' }}>
+        <button onClick={() => setDebugMode(!debugMode)} style={{ position: 'relative', width: isMobile ? '100%' : 'auto', padding: '10px 20px', background: 'linear-gradient(180deg, #2a4a7a 0%, #1a3055 50%, #0d1a30 100%)', border: '1.5px solid rgba(80, 130, 180, 0.6)', borderTopColor: 'rgba(150, 200, 255, 0.8)', borderLeftColor: 'rgba(120, 170, 220, 0.7)', borderRadius: '22px', color: '#ffffff', fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif', fontSize: '13px', fontWeight: 600, letterSpacing: '1px', cursor: 'pointer', boxShadow: '0 3px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2), inset 1px 0 0 rgba(255,255,255,0.1)', transition: 'all 0.2s ease' }}>
+           {debugMode ? '隐藏摄像头' : '检查摄像头'}
         </button>
-        <button onClick={() => setSceneState(s => s === 'CHAOS' ? 'FORMED' : 'CHAOS')} style={{ width: isMobile ? '100%' : 'auto', padding: '12px 30px', backgroundColor: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255, 215, 0, 0.5)', color: '#FFD700', fontFamily: 'serif', fontSize: '14px', fontWeight: 'bold', letterSpacing: '3px', textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(4px)' }}>
-           {sceneState === 'CHAOS' ? 'Assemble Tree' : 'Disperse'}
+        <button onClick={() => setSceneState(s => s === 'CHAOS' ? 'FORMED' : 'CHAOS')} style={{ position: 'relative', width: isMobile ? '100%' : 'auto', padding: '10px 20px', background: 'linear-gradient(180deg, #2a4a7a 0%, #1a3055 50%, #0d1a30 100%)', border: '1.5px solid rgba(80, 130, 180, 0.6)', borderTopColor: 'rgba(150, 200, 255, 0.8)', borderLeftColor: 'rgba(120, 170, 220, 0.7)', borderRadius: '22px', color: '#ffffff', fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif', fontSize: '13px', fontWeight: 600, letterSpacing: '1px', cursor: 'pointer', boxShadow: '0 3px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2), inset 1px 0 0 rgba(255,255,255,0.1)', transition: 'all 0.2s ease' }}>
+           {sceneState === 'CHAOS' ? '汇聚宇宙' : '分散宇宙'}
         </button>
       </div>
 
@@ -5968,67 +5971,7 @@ export default function GrandTreeApp() {
                 {selectedPhoto.message}
               </div>
             </div>
-            {/* 保存和分享按钮 */}
-            <div style={{ display: 'flex', gap: isMobile ? '16px' : '40px', justifyContent: 'center' }}>
-              <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  try {
-                    const response = await fetch(selectedPhoto.path);
-                    const blob = await response.blob();
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = `memory-${Date.now()}.jpg`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
-                  } catch (err) {
-                    console.error('保存图片失败:', err);
-                  }
-                }}
-                style={{
-                  flex: 1,
-                  maxWidth: isMobile ? '120px' : '160px',
-                  padding: isMobile ? '10px 16px' : '14px 24px',
-                  backgroundColor: 'rgba(255, 215, 0, 0.9)',
-                  border: 'none',
-                  borderRadius: isMobile ? '10px' : '12px',
-                  color: '#222',
-                  fontSize: isMobile ? '13px' : '15px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 15px rgba(255, 215, 0, 0.3)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                保存寄语
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // 分享功能暂未实现
-                  console.log('分享功能待实现');
-                }}
-                style={{
-                  flex: 1,
-                  maxWidth: isMobile ? '120px' : '160px',
-                  padding: isMobile ? '10px 16px' : '14px 24px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                  border: '1px solid rgba(255, 215, 0, 0.5)',
-                  borderRadius: isMobile ? '10px' : '12px',
-                  color: '#FFD700',
-                  fontSize: isMobile ? '13px' : '15px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  backdropFilter: 'blur(4px)',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                分享寄语
-              </button>
-            </div>
+
           </div>
         </div>
       )}
