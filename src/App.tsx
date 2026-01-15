@@ -2137,7 +2137,7 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
   // 生成粒子数据 - 直接分层，避免后续重复计算
   const { blueLayerData, whiteLayerData } = useMemo(() => {
     const particleCount = 90000;
-    const decorativeCount = 20000;
+    const decorativeCount = 4000;  // 进一步减少装饰性粒子
     const totalCount = particleCount + decorativeCount;
     
     // 临时数组存储所有粒子数据
@@ -2237,14 +2237,14 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       
       // 核心中轴线区域：竖着的白色粒子线
       if (rawHorizontalDist < 1.5) {
-        // 核心中轴线：纯白色，降低透明度
+        // 核心中轴线：纯白色
         color.copy(cCore);
-        baseAlpha = 0.7 + Math.random() * 0.2;
-      } else if (rawHorizontalDist < 2.5) {
-        // 过渡区域：竖着的白色到青色渐变
-        const t = (rawHorizontalDist - 1.5) / 1.0;
-        color.lerpColors(cCore, cMid, t * 0.5);
         baseAlpha = 0.6 + Math.random() * 0.2;
+      } else if (rawHorizontalDist < 2.5) {
+        // 过渡区域：白色到青色渐变
+        const t = (rawHorizontalDist - 1.5) / 1.0;
+        color.lerpColors(cCore, cMid, t * 0.3); // 保持更白一些
+        baseAlpha = 0.55 + Math.random() * 0.15;
       } else if (typeRand > 0.85) {
         color.copy(cCore);
         baseAlpha = 0.08 + Math.random() * 0.12;
@@ -2264,13 +2264,21 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       
       let baseSize = 0.0;
       
-      // 核心区域粒子更大
+      // 核心区域粒子更大，数量更稀疏
       if (distFromAxis < 1.5) {
-        // 核心中轴线：大粒子
-        baseSize = 0.8 + Math.random() * 0.6;
+        // 核心中轴线：大粒子，只保留8%
+        if (Math.random() > 0.92) {
+          baseSize = 1.5 + Math.random() * 1.0;
+        } else {
+          baseSize = 0.02;
+        }
       } else if (distFromAxis < 2.5) {
-        // 过渡区域：中等大小
-        baseSize = 0.5 + Math.random() * 0.5;
+        // 过渡区域：大粒子，只保留10%
+        if (Math.random() > 0.9) {
+          baseSize = 1.0 + Math.random() * 0.8;
+        } else {
+          baseSize = 0.02;
+        }
       } else if (typeRand > 0.92) {
         baseSize = 0.2 + Math.random() * 0.3;
       } else if (typeRand > 0.78) {
@@ -2283,7 +2291,7 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
           baseSize = 0.5 + (sizeR - 0.8) * 2.5;
         } else {
           if (axisDist < 3.0) {
-            baseSize = 0.8 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 1.5;
+            baseSize = 1.2 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 0.8;
             color.copy(cCore);
             baseAlpha = 1.0;
           } else {
@@ -2303,7 +2311,7 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
         alpha: baseAlpha,
         random: Math.random(),
         speed: 0.5 + Math.random() * 1.5,
-        isWhite: brightness > 0.85
+        isWhite: brightness > 0.55  // 降低阈值，让更多内部白色粒子被识别
       });
     }
     
@@ -2340,13 +2348,18 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
       const dispZ = Math.cos(phi) * disperseRadius;
       
+      // 装饰性白色粒子 - 稀疏大颗
+      const particleSize = Math.random() > 0.85 
+        ? 0.8 + Math.random() * 0.8   // 15% 大粒子
+        : 0.15 + Math.random() * 0.2;  // 85% 小粒子
+      
       tempData.push({
         pos: [dispX, dispY, dispZ],
         target: [x, y, z],
         disperse: [dispX, dispY, dispZ],
         color: [1.0, 1.0, 1.0],
-        size: 0.15 + Math.random() * 0.25,
-        alpha: 0.2 + Math.random() * 0.3,
+        size: particleSize,
+        alpha: 0.3 + Math.random() * 0.3,
         random: Math.random(),
         speed: 0.3 + Math.random() * 0.8,
         isWhite: true
@@ -2554,33 +2567,32 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
           
           // 判断粒子是偏白还是偏蓝（通过颜色亮度）
           float brightness = (vColor.r + vColor.g + vColor.b) / 3.0;
-          float whiteMask = smoothstep(0.6, 1.0, brightness); // 1=白色粒子, 0=蓝色粒子
+          float whiteMask = smoothstep(0.5, 0.9, brightness); // 1=白色粒子, 0=蓝色粒子
           
-          // 呼吸闪烁效果 - 参考 code-2.html
-          float breathCycle = sin(uFlashTime * 0.8) * 0.5 + 0.5;
-          float localBreath = sin(uFlashTime * 0.8 + vRand * 3.14) * 0.5 + 0.5;
-          float breathIntensity = mix(breathCycle, localBreath, 0.3);
+          float breathIntensity = 1.0;
           
           // 散开时的星星闪烁效果
           if (vEasedMix < 0.5) {
             float starTwinkle = sin(uFlashTime * 2.0 + vRand * 10.0) * 0.5 + 0.5;
             breathIntensity = 0.8 + starTwinkle * 0.4;
           } else {
-            // 聚合态：降低白色粒子亮度，呼吸幅度适中
-            // 白色粒子：0.7-1.3 范围（降低过曝）
-            // 蓝色粒子：0.85-1.15 范围
-            float whiteBreath = 0.7 + breathIntensity * 0.6;
-            float blueBreath = 0.85 + breathIntensity * 0.3;
+            // 聚合态：白色粒子呼吸闪烁效果
+            float breathCycle = sin(uFlashTime * 2.0) * 0.5 + 0.5;
+            
+            // 白色粒子：最暗0.4（保持轮廓），最亮1.0
+            float whiteBreath = 0.4 + breathCycle * 0.6;
+            // 蓝色粒子：保持稳定亮度
+            float blueBreath = 1.0;
+            
             breathIntensity = mix(blueBreath, whiteBreath, whiteMask);
           }
           
           vec3 finalColor = vColor * breathIntensity;
           float finalAlpha = vAlpha;
           
-          // 聚合态透明度参与呼吸（幅度减小）
-          if (vEasedMix > 0.5) {
-            float alphaBreath = mix(1.0, breathIntensity, whiteMask * 0.3);
-            finalAlpha *= alphaBreath;
+          // 白色粒子透明度也跟随呼吸，幅度较小
+          if (vEasedMix > 0.5 && whiteMask > 0.5) {
+            finalAlpha *= (0.5 + breathIntensity * 0.5);
           }
           
           gl_FragColor = vec4(finalColor, finalAlpha * t.a);
@@ -2642,24 +2654,23 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
           vec4 t = texture2D(uTex, gl_PointCoord);
           if (t.a < 0.01) discard;
           
-          float breathIntensity;
+          float breathIntensity = 1.0;
           
           if (vEasedMix < 0.5) {
-            // 散开态：星星闪烁（保持个体差异）
+            // 散开态：星星闪烁
             float starTwinkle = sin(uFlashTime * 1.0 + vRand * 10.0) * 0.5 + 0.5;
             breathIntensity = 0.8 + starTwinkle * 0.4;
           } else {
-            // 聚合态：整体同步呼吸，所有白色粒子一起明暗
-            // 主呼吸周期 - 放慢到 0.6（约 10 秒一个周期）
-            float mainBreath = sin(uFlashTime * 0.6) * 0.5 + 0.5;
-            // 只加一点点个体差异（5%），保持整体同步感
-            float tinyVariation = sin(uFlashTime * 0.6 + vRand * 0.5) * 0.05;
-            // 提高最低亮度到 0.55，避免"挖空"感
-            breathIntensity = 0.55 + (mainBreath + tinyVariation) * 0.7; // 0.55-1.25 范围
+            // 聚合态：呼吸闪烁效果
+            // 使用频率 2.0（约3秒一个周期）
+            float breathCycle = sin(uFlashTime * 2.0) * 0.5 + 0.5;
+            // 最暗时0.4（仍能看到轮廓），最亮时1.0
+            breathIntensity = 0.4 + breathCycle * 0.6;
           }
           
           vec3 finalColor = vColor * breathIntensity;
-          float finalAlpha = vAlpha * (0.6 + breathIntensity * 0.4); // 透明度呼吸幅度减小
+          // 透明度也跟随呼吸，但幅度较小（0.5-1.0）
+          float finalAlpha = vAlpha * (0.5 + breathIntensity * 0.5);
           
           gl_FragColor = vec4(finalColor, finalAlpha * t.a);
         }
