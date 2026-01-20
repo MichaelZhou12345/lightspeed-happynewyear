@@ -2143,43 +2143,37 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
     // 闪电轮廓边界检查函数（严格判断点是否在闪电内部）
     // 闪电形状：s=0.65, 居中后的坐标
     const isInsideLightning = (x: number, y: number): boolean => {
-      // 非常保守的边界，确保粒子严格在内部
+      // 更严格的边界，确保粒子严格在内部
       
-      if (y > 0) {
+      if (y > 2) {
         // 上三角形区域
-        const topY = 11;  // 非常保守的顶点y
-        const bottomY = 1.5;  // 保守的底边y
+        const topY = 10;  // 更保守的顶点y
+        const bottomY = 2;  // 保守的底边y
         
         if (y > topY) return false;
-        if (y < bottomY) return true; // 中间连接区域单独处理
         
-        // 线性插值计算该y高度的x范围
-        const t = (y - bottomY) / (topY - bottomY);  // 0到1，0是底部，1是顶部
-        // 底部半宽约4.5，顶部半宽约0.5
-        const halfWidth = 4 * (1 - t) + 0.5 * t;
+        // 线性插值计算该y高度的x范围，使用与粒子生成相同的公式
+        const halfWidth = Math.max(0.15, (10 - y) * 0.35);
         // 中轴线有斜度
         const centerX = y * 0.1;
         
-        return Math.abs(x - centerX) <= halfWidth * 0.75;
-      } else if (y < 0) {
+        return Math.abs(x - centerX) <= halfWidth * 0.6;  // 更严格的系数
+      } else if (y < -2) {
         // 下三角形区域
-        const bottomY = -11;  // 非常保守的底点y
-        const topY = -1.5;  // 保守的顶边y
+        const bottomY = -10;  // 更保守的底点y
+        const topY = -2;  // 保守的顶边y
         
         if (y < bottomY) return false;
-        if (y > topY) return true; // 中间连接区域单独处理
         
         // 线性插值计算该y高度的x范围
-        const t = (topY - y) / (topY - bottomY);  // 0到1，0是顶部，1是底部
-        // 顶部半宽约4.5，底部半宽约0.5
-        const halfWidth = 4 * (1 - t) + 0.5 * t;
+        const halfWidth = Math.max(0.15, (10 + y) * 0.35);
         // 中轴线有斜度
         const centerX = y * 0.1;
         
-        return Math.abs(x - centerX) <= halfWidth * 0.75;
+        return Math.abs(x - centerX) <= halfWidth * 0.6;  // 更严格的系数
       } else {
-        // y在-1.5到1.5之间，中间连接区域
-        return Math.abs(x) <= 3.5;
+        // y在-2到2之间，中间连接区域
+        return Math.abs(x) <= 2.5;  // 更保守的中间区域宽度
       }
     };
     
@@ -2194,6 +2188,7 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       random: number;
       speed: number;
       isWhite: boolean;
+      isOuterEdge?: boolean;  // 可选属性，标记外侧边缘粒子
     }> = [];
     
     const geoPos = lightningGeometry.attributes.position;
@@ -2507,24 +2502,24 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
     const sideAccentCount = 200;  // 减少数量
     for (let i = 0; i < sideAccentCount; i++) {
       // 在整个闪电高度范围内均匀随机分布
-      const baseY = -10 + Math.random() * 20;  // y从-10到10，覆盖整个闪电
+      const baseY = -9 + Math.random() * 18;  // y从-9到9，稍微收缩范围
       let x, z;
       
-      // 根据y计算该高度的闪电宽度
+      // 根据y计算该高度的闪电宽度，使用更保守的边界
       let maxHalfWidth;
       if (baseY > 2) {
-        // 上三角形区域：越往上越窄
-        maxHalfWidth = Math.max(0.3, (11 - baseY) * 0.5);
+        // 上三角形区域：越往上越窄，更保守的计算
+        maxHalfWidth = Math.max(0.2, (10 - baseY) * 0.4);
       } else if (baseY < -2) {
-        // 下三角形区域：越往下越窄
-        maxHalfWidth = Math.max(0.3, (11 + baseY) * 0.5);
+        // 下三角形区域：越往下越窄，更保守的计算
+        maxHalfWidth = Math.max(0.2, (10 + baseY) * 0.4);
       } else {
-        // 中间连接区域：最宽
-        maxHalfWidth = 4.0;
+        // 中间连接区域：最宽，但也要保守一些
+        maxHalfWidth = 3.2;
       }
       
-      // 在该高度的整个宽度范围内随机分布
-      const offsetX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.8;
+      // 在该高度的宽度范围内随机分布，使用更小的系数
+      const offsetX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.65;
       x = offsetX * scale;
       const y = baseY * scale;
       z = (Math.random() - 0.5) * 0.5 * scale;
@@ -2552,22 +2547,22 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
     // 额外零星点缀粒子（分布在整个闪电形状上，增加覆盖面）
     const edgeAccentCount = 100;  // 增加一些
     for (let i = 0; i < edgeAccentCount; i++) {
-      // 在整个闪电高度范围内均匀分布
-      const baseY = -10 + Math.random() * 20;  // y从-10到10
+      // 在整个闪电高度范围内均匀分布，收缩范围
+      const baseY = -9 + Math.random() * 18;  // y从-9到9
       let x, z;
       
-      // 根据y计算该高度的闪电宽度
+      // 根据y计算该高度的闪电宽度，使用更保守的边界
       let maxHalfWidth;
       if (baseY > 2) {
-        maxHalfWidth = Math.max(0.2, (11 - baseY) * 0.45);
+        maxHalfWidth = Math.max(0.15, (10 - baseY) * 0.35);
       } else if (baseY < -2) {
-        maxHalfWidth = Math.max(0.2, (11 + baseY) * 0.45);
+        maxHalfWidth = Math.max(0.15, (10 + baseY) * 0.35);
       } else {
-        maxHalfWidth = 3.5;
+        maxHalfWidth = 2.8;
       }
       
-      // 在整个宽度范围内随机分布
-      const baseX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.85;
+      // 在宽度范围内随机分布，使用更小的系数
+      const baseX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.7;
       x = baseX * scale;
       const y = baseY * scale;
       z = (Math.random() - 0.5) * 0.4 * scale;
