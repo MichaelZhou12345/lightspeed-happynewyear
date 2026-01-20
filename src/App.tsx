@@ -6267,53 +6267,7 @@ export default function GrandTreeApp() {
 
       {/* UI - AI Status */}
       <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
-        {/* Happy New Year - 已禁用
-        <div style={{ 
-          fontFamily: "'Great Vibes', 'Dancing Script', 'Pacifico', cursive",
-          fontSize: '56px', 
-          fontWeight: 400,
-          background: 'linear-gradient(135deg, #22D3EE, #FFFFFF, #3B82F6, #FFFFFF, #22D3EE)',
-          backgroundSize: '200% 200%',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          filter: 'drop-shadow(0 0 20px rgba(6, 182, 212, 0.8)) drop-shadow(0 0 40px rgba(59, 130, 246, 0.4))',
-          userSelect: 'none',
-          animation: 'shimmer 3s ease-in-out infinite',
-          opacity: sceneState === 'FORMED' ? 1 : 0,
-          transition: 'opacity 0.3s ease-out',
-        }}>
-          Happy New Year
-        </div>
-        */}
-        {/* 光子工作室文字 - 已注释
-        <div style={{ 
-          fontSize: '22px', 
-          letterSpacing: '3px', 
-          fontWeight: 800,
-          background: 'linear-gradient(to right, #22D3EE, #FFFFFF, #3B82F6)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          filter: 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.6))',
-          userSelect: 'none'
-        }}>
-          光子工作室祝大家新年快乐！
-        </div>
-        <div style={{ 
-          fontSize: '22px', 
-          letterSpacing: '3px', 
-          fontWeight: 800,
-          background: 'linear-gradient(to right, #22D3EE, #FFFFFF, #3B82F6)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-          filter: 'drop-shadow(0 0 15px rgba(6, 182, 212, 0.6))',
-          userSelect: 'none'
-        }}>
-          感谢每一个闪闪发光的你
-        </div>
-        */}
+        
         <div style={{ color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(0, 240, 255, 0.5)', fontSize: '10px', letterSpacing: '2px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
           {aiStatus}
         </div>
