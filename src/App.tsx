@@ -2140,6 +2140,49 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
     const decorativeCount = 4000;  // 进一步减少装饰性粒子
     const totalCount = particleCount + decorativeCount;
     
+    // 闪电轮廓边界检查函数（严格判断点是否在闪电内部）
+    // 闪电形状：s=0.65, 居中后的坐标
+    const isInsideLightning = (x: number, y: number): boolean => {
+      // 非常保守的边界，确保粒子严格在内部
+      
+      if (y > 0) {
+        // 上三角形区域
+        const topY = 11;  // 非常保守的顶点y
+        const bottomY = 1.5;  // 保守的底边y
+        
+        if (y > topY) return false;
+        if (y < bottomY) return true; // 中间连接区域单独处理
+        
+        // 线性插值计算该y高度的x范围
+        const t = (y - bottomY) / (topY - bottomY);  // 0到1，0是底部，1是顶部
+        // 底部半宽约4.5，顶部半宽约0.5
+        const halfWidth = 4 * (1 - t) + 0.5 * t;
+        // 中轴线有斜度
+        const centerX = y * 0.1;
+        
+        return Math.abs(x - centerX) <= halfWidth * 0.75;
+      } else if (y < 0) {
+        // 下三角形区域
+        const bottomY = -11;  // 非常保守的底点y
+        const topY = -1.5;  // 保守的顶边y
+        
+        if (y < bottomY) return false;
+        if (y > topY) return true; // 中间连接区域单独处理
+        
+        // 线性插值计算该y高度的x范围
+        const t = (topY - y) / (topY - bottomY);  // 0到1，0是顶部，1是底部
+        // 顶部半宽约4.5，底部半宽约0.5
+        const halfWidth = 4 * (1 - t) + 0.5 * t;
+        // 中轴线有斜度
+        const centerX = y * 0.1;
+        
+        return Math.abs(x - centerX) <= halfWidth * 0.75;
+      } else {
+        // y在-1.5到1.5之间，中间连接区域
+        return Math.abs(x) <= 3.5;
+      }
+    };
+    
     // 临时数组存储所有粒子数据
     const tempData: Array<{
       pos: [number, number, number];
@@ -2201,14 +2244,15 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       
       if (rawAxisDist < 2.0) {
         // 核心区域：非常紧凑，几乎不弥散
-        spread = 0.3;
+        spread = 0.2;
       } else if (rawAxisDist < 4.0) {
         // 过渡区域：轻微弥散
-        spread = 0.5 + (rawAxisDist - 2.0) * 0.25;
-      } else if (typeRand > 0.92) {
-        spread = 4.0;
-      } else if (typeRand > 0.78) {
-        spread = 2.0;
+        spread = 0.3 + (rawAxisDist - 2.0) * 0.15;
+      } else if (typeRand > 0.95) {
+        // 减少大弥散粒子的比例和范围
+        spread = 1.5;
+      } else if (typeRand > 0.85) {
+        spread = 0.8;
       }
       
       x += (Math.random() - 0.5) * spread;
@@ -2231,20 +2275,59 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       
       let color = new THREE.Color();
       let baseAlpha = 1.0;
+      let baseSize = 0.0;
+      let isLargeWhite = false;  // 标记是否是大颗白色粒子
       
       // 使用原始位置判断中轴线（弥散前的 x 和 z）
       const rawHorizontalDist = Math.sqrt(rawX * rawX + rawZ * rawZ);
       
-      // 核心中轴线区域：竖着的白色粒子线
-      if (rawHorizontalDist < 1.5) {
-        // 核心中轴线：纯白色
+      // 先确定粒子大小
+      if (distFromAxis < 1.5) {
+        // 核心中轴线：大粒子，只保留3%
+        if (Math.random() > 0.97) {
+          baseSize = 1.2 + Math.random() * 0.8;
+          isLargeWhite = true;
+        } else {
+          baseSize = 0.15 + Math.random() * 0.15;
+        }
+      } else if (distFromAxis < 2.5) {
+        // 过渡区域：大粒子，只保留4%
+        if (Math.random() > 0.96) {
+          baseSize = 0.9 + Math.random() * 0.6;
+          isLargeWhite = true;
+        } else {
+          baseSize = 0.12 + Math.random() * 0.12;
+        }
+      } else if (typeRand > 0.92) {
+        baseSize = 0.2 + Math.random() * 0.3;
+      } else if (typeRand > 0.78) {
+        baseSize = 0.3 + Math.random() * 0.4;
+      } else {
+        const sizeR = Math.random();
+        if (sizeR < 0.8) {
+          baseSize = 0.1 + sizeR * 0.4;
+        } else if (sizeR < 0.96) {
+          baseSize = 0.5 + (sizeR - 0.8) * 2.5;
+        } else {
+          if (axisDist < 3.0) {
+            baseSize = 1.2 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 0.8;
+            isLargeWhite = true;
+          } else {
+            baseSize = 0.4;
+          }
+        }
+      }
+      
+      // 根据是否是大颗白色粒子决定颜色
+      if (isLargeWhite) {
+        // 大颗白色粒子：保持白色，会闪烁
         color.copy(cCore);
-        baseAlpha = 0.6 + Math.random() * 0.2;
+        baseAlpha = 0.7 + Math.random() * 0.2;
       } else if (rawHorizontalDist < 2.5) {
-        // 过渡区域：白色到青色渐变
-        const t = (rawHorizontalDist - 1.5) / 1.0;
-        color.lerpColors(cCore, cMid, t * 0.3); // 保持更白一些
-        baseAlpha = 0.55 + Math.random() * 0.15;
+        // 核心区域的小粒子：蓝紫色渐变
+        const t = Math.random();
+        color.lerpColors(cMid, cEdge, t);  // 青色到紫色渐变
+        baseAlpha = 0.5 + Math.random() * 0.3;
       } else if (typeRand > 0.85) {
         color.copy(cCore);
         baseAlpha = 0.08 + Math.random() * 0.12;
@@ -2262,46 +2345,6 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
         baseAlpha = 1.0;
       }
       
-      let baseSize = 0.0;
-      
-      // 核心区域粒子更大，数量更稀疏
-      if (distFromAxis < 1.5) {
-        // 核心中轴线：大粒子，只保留8%
-        if (Math.random() > 0.92) {
-          baseSize = 1.5 + Math.random() * 1.0;
-        } else {
-          baseSize = 0.02;
-        }
-      } else if (distFromAxis < 2.5) {
-        // 过渡区域：大粒子，只保留10%
-        if (Math.random() > 0.9) {
-          baseSize = 1.0 + Math.random() * 0.8;
-        } else {
-          baseSize = 0.02;
-        }
-      } else if (typeRand > 0.92) {
-        baseSize = 0.2 + Math.random() * 0.3;
-      } else if (typeRand > 0.78) {
-        baseSize = 0.3 + Math.random() * 0.4;
-      } else {
-        const sizeR = Math.random();
-        if (sizeR < 0.8) {
-          baseSize = 0.1 + sizeR * 0.4;
-        } else if (sizeR < 0.96) {
-          baseSize = 0.5 + (sizeR - 0.8) * 2.5;
-        } else {
-          if (axisDist < 3.0) {
-            baseSize = 1.2 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 0.8;
-            color.copy(cCore);
-            baseAlpha = 1.0;
-          } else {
-            baseSize = 0.4;
-          }
-        }
-      }
-      
-      const brightness = (color.r + color.g + color.b) / 3.0;
-      
       tempData.push({
         pos: [dispX, dispY, dispZ],
         target: [x, y, z],
@@ -2311,11 +2354,11 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
         alpha: baseAlpha,
         random: Math.random(),
         speed: 0.5 + Math.random() * 1.5,
-        isWhite: brightness > 0.55  // 降低阈值，让更多内部白色粒子被识别
+        isWhite: isLargeWhite  // 只有大颗白色粒子才归类到白色层
       });
     }
     
-    // 装饰性白色粒子
+    // 装饰性白色粒子 - 严格限制在闪电轮廓内
     for (let i = particleCount; i < totalCount; i++) {
       const fIdx = Math.floor(Math.random() * (vCount / 3));
       const i1 = fIdx * 3, i2 = fIdx * 3 + 1, i3 = fIdx * 3 + 2;
@@ -2332,10 +2375,31 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       let y = w1 * vA.y + w2 * vB.y + w3 * vC.y;
       let z = w1 * vA.z + w2 * vB.z + w3 * vC.z;
       
-      const nearSpread = 1.5 + Math.random() * 2.0;
+      // 减小扩散范围
+      const nearSpread = 0.5 + Math.random() * 0.5;
       x += (Math.random() - 0.5) * nearSpread;
       y += (Math.random() - 0.5) * nearSpread;
-      z += (Math.random() - 0.5) * nearSpread * 2.0;
+      z += (Math.random() - 0.5) * nearSpread;
+      
+      // 严格限制在闪电轮廓内
+      // 闪电形状：上三角形顶点(2, 12)，下三角形顶点(-2, -12)
+      // 中间连接处y在-2到2之间
+      let maxX;
+      if (y > 2) {
+        // 上三角形：y=12时x约2，y=2时x约6
+        maxX = 2 + (12 - y) * 0.4;
+      } else if (y < -2) {
+        // 下三角形：y=-2时x约6，y=-12时x约2
+        maxX = 2 + (12 + y) * 0.4;
+      } else {
+        // 中间连接处
+        maxX = 5;
+      }
+      // 严格限制x，确保在轮廓内
+      maxX = Math.max(0.5, maxX * 0.7);
+      if (Math.abs(x) > maxX) {
+        x = Math.sign(x) * maxX * (0.5 + Math.random() * 0.4);
+      }
       
       x *= scale;
       y *= scale;
@@ -2348,10 +2412,10 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
       const dispZ = Math.cos(phi) * disperseRadius;
       
-      // 装饰性白色粒子 - 稀疏大颗
-      const particleSize = Math.random() > 0.85 
-        ? 0.8 + Math.random() * 0.8   // 15% 大粒子
-        : 0.15 + Math.random() * 0.2;  // 85% 小粒子
+      // 装饰性白色粒子 - 更稀疏
+      const particleSize = Math.random() > 0.95 
+        ? 0.7 + Math.random() * 0.5   // 5% 大粒子
+        : 0.12 + Math.random() * 0.15;  // 95% 小粒子
       
       tempData.push({
         pos: [dispX, dispY, dispZ],
@@ -2366,9 +2430,180 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       });
     }
     
-    // 分层
+    // 连接处大白色粒子 - 随机分布在中间区域
+    const connectionParticleCount = 120;
+    for (let i = 0; i < connectionParticleCount; i++) {
+      const baseY = -2 + Math.random() * 4;  // y从-2到2，随机分布
+      
+      // 根据y位置计算该高度的最大宽度（中间区域形状）
+      const maxHalfWidth = 2.5 + Math.abs(baseY) * 0.3;  // 中间宽，两端稍窄
+      
+      // 在该高度随机选择x位置
+      const baseX = (Math.random() - 0.5) * 2 * maxHalfWidth;
+      
+      // 添加小范围随机偏移
+      const x = (baseX + (Math.random() - 0.5) * 0.8) * scale;
+      const y = (baseY + (Math.random() - 0.5) * 0.3) * scale;
+      const z = (Math.random() - 0.5) * 0.4 * scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [1.0, 1.0, 1.0],
+        size: 1.0 + Math.random() * 0.6,
+        alpha: 0.5 + Math.random() * 0.3,
+        random: Math.random(),
+        speed: 0.3 + Math.random() * 0.5,
+        isWhite: true
+      });
+    }
+    
+    // 连接处散落粒子 - 随机分布在中间区域两侧
+    const scatterParticleCount = 400;
+    for (let i = 0; i < scatterParticleCount; i++) {
+      const baseY = -2 + Math.random() * 4;  // y从-2到2，随机分布
+      
+      // 根据y值计算最大x偏移，确保在闪电轮廓内
+      // y=0附近最宽，y=±2时较窄
+      const maxOffset = 3.0 - Math.abs(baseY) * 0.3;
+      
+      // 随机选择左侧或右侧
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const offsetX = side * (0.8 + Math.random() * maxOffset);
+      
+      const x = offsetX * scale;
+      const y = (baseY + (Math.random() - 0.5) * 0.6) * scale;
+      const z = (Math.random() - 0.5) * 0.6 * scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [1.0, 1.0, 1.0],
+        size: 0.8 + Math.random() * 0.8,
+        alpha: 0.45 + Math.random() * 0.35,
+        random: Math.random(),
+        speed: 0.3 + Math.random() * 0.5,
+        isWhite: true
+      });
+    }
+    
+    // 闪电内部零星点缀的白色大粒子（随机散布在整个闪电形状上）
+    const sideAccentCount = 200;  // 减少数量
+    for (let i = 0; i < sideAccentCount; i++) {
+      // 在整个闪电高度范围内均匀随机分布
+      const baseY = -10 + Math.random() * 20;  // y从-10到10，覆盖整个闪电
+      let x, z;
+      
+      // 根据y计算该高度的闪电宽度
+      let maxHalfWidth;
+      if (baseY > 2) {
+        // 上三角形区域：越往上越窄
+        maxHalfWidth = Math.max(0.3, (11 - baseY) * 0.5);
+      } else if (baseY < -2) {
+        // 下三角形区域：越往下越窄
+        maxHalfWidth = Math.max(0.3, (11 + baseY) * 0.5);
+      } else {
+        // 中间连接区域：最宽
+        maxHalfWidth = 4.0;
+      }
+      
+      // 在该高度的整个宽度范围内随机分布
+      const offsetX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.8;
+      x = offsetX * scale;
+      const y = baseY * scale;
+      z = (Math.random() - 0.5) * 0.5 * scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [1.0, 1.0, 1.0],
+        size: 1.2 + Math.random() * 0.8,
+        alpha: 0.55 + Math.random() * 0.35,
+        random: Math.random(),
+        speed: 0.3 + Math.random() * 0.5,
+        isWhite: true
+      });
+    }
+    
+    // 额外零星点缀粒子（分布在整个闪电形状上，增加覆盖面）
+    const edgeAccentCount = 100;  // 增加一些
+    for (let i = 0; i < edgeAccentCount; i++) {
+      // 在整个闪电高度范围内均匀分布
+      const baseY = -10 + Math.random() * 20;  // y从-10到10
+      let x, z;
+      
+      // 根据y计算该高度的闪电宽度
+      let maxHalfWidth;
+      if (baseY > 2) {
+        maxHalfWidth = Math.max(0.2, (11 - baseY) * 0.45);
+      } else if (baseY < -2) {
+        maxHalfWidth = Math.max(0.2, (11 + baseY) * 0.45);
+      } else {
+        maxHalfWidth = 3.5;
+      }
+      
+      // 在整个宽度范围内随机分布
+      const baseX = (Math.random() - 0.5) * 2 * maxHalfWidth * 0.85;
+      x = baseX * scale;
+      const y = baseY * scale;
+      z = (Math.random() - 0.5) * 0.4 * scale;
+      
+      const disperseRadius = 300 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const dispX = Math.sin(phi) * Math.cos(theta) * disperseRadius;
+      const dispY = Math.sin(phi) * Math.sin(theta) * disperseRadius;
+      const dispZ = Math.cos(phi) * disperseRadius;
+      
+      tempData.push({
+        pos: [dispX, dispY, dispZ],
+        target: [x, y, z],
+        disperse: [dispX, dispY, dispZ],
+        color: [1.0, 1.0, 1.0],
+        size: 1.2 + Math.random() * 0.8,
+        alpha: 0.55 + Math.random() * 0.35,
+        random: Math.random(),
+        speed: 0.3 + Math.random() * 0.5,
+        isWhite: true
+      });
+    }
+    
+    // 缩放因子（用于边界检查时还原坐标）
+    const scaleForCheck = (CONFIG.tree.height / 48) * 1.8;
+    
+    // 分层 - 白色粒子严格过滤，只保留在闪电轮廓内的
     const blueParticles = tempData.filter(p => !p.isWhite);
-    const whiteParticles = tempData.filter(p => p.isWhite);
+    const whiteParticles = tempData.filter(p => {
+      if (!p.isWhite) return false;
+      // 还原到原始坐标进行边界检查
+      const x = p.target[0] / scaleForCheck;
+      const y = p.target[1] / scaleForCheck;
+      return isInsideLightning(x, y);
+    });
     
     const createLayerData = (particles: typeof tempData) => {
       const count = particles.length;
@@ -5629,6 +5864,10 @@ const GestureController = ({ onGesture, onMove, onMoveVertical, onStatus, debugM
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pinchRef = useRef(false);
+  // 缓存上一次的值，避免每帧创建新对象触发不必要的重渲染
+  const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastSpeedXRef = useRef(0);
+  const lastSpeedYRef = useRef(0);
 
   useEffect(() => {
     let gestureRecognizer: GestureRecognizer;
@@ -5694,11 +5933,25 @@ const GestureController = ({ onGesture, onMove, onMoveVertical, onStatus, debugM
               const hand = results.landmarks[0][0];
               // 横向速度 - 手在左右移动（增大系数，降低阈值）
               const speedX = (0.5 - hand.x) * 0.35;
-              onMove(Math.abs(speedX) > 0.005 ? speedX : 0);
+              const newSpeedX = Math.abs(speedX) > 0.005 ? speedX : 0;
+              // 只在值变化时才调用，避免不必要的状态更新
+              if (Math.abs(newSpeedX - lastSpeedXRef.current) > 0.001) {
+                lastSpeedXRef.current = newSpeedX;
+                onMove(newSpeedX);
+              }
               // 纵向速度 - 手在上下移动
               const speedY = (0.5 - hand.y) * 0.35;
-              onMoveVertical?.(Math.abs(speedY) > 0.005 ? speedY : 0);
-              onPoint?.({ x: hand.x, y: hand.y });
+              const newSpeedY = Math.abs(speedY) > 0.005 ? speedY : 0;
+              if (Math.abs(newSpeedY - lastSpeedYRef.current) > 0.001) {
+                lastSpeedYRef.current = newSpeedY;
+                onMoveVertical?.(newSpeedY);
+              }
+              // 只在手部位置明显变化时才更新 focusPoint
+              const lastPoint = lastPointRef.current;
+              if (!lastPoint || Math.abs(hand.x - lastPoint.x) > 0.01 || Math.abs(hand.y - lastPoint.y) > 0.01) {
+                lastPointRef.current = { x: hand.x, y: hand.y };
+                onPoint?.(lastPointRef.current);
+              }
               
               // 捏合检测
               const thumbTip = results.landmarks[0][4];
@@ -5713,9 +5966,19 @@ const GestureController = ({ onGesture, onMove, onMoveVertical, onStatus, debugM
               
               if (debugMode && results.gestures.length === 0) onStatus("TRACKING HAND");
             } else { 
-              onMove(0); 
-              onMoveVertical?.(0); 
-              onPoint?.(null); 
+              // 只在从有手到无手时才更新状态
+              if (lastSpeedXRef.current !== 0) {
+                lastSpeedXRef.current = 0;
+                onMove(0);
+              }
+              if (lastSpeedYRef.current !== 0) {
+                lastSpeedYRef.current = 0;
+                onMoveVertical?.(0);
+              }
+              if (lastPointRef.current !== null) {
+                lastPointRef.current = null;
+                onPoint?.(null);
+              }
               if (pinchRef.current) { pinchRef.current = false; onPinch?.(false); } 
               if (debugMode) onStatus("AI READY: NO HAND"); 
             }
@@ -5963,23 +6226,38 @@ export default function GrandTreeApp() {
       {selectedPhoto && (
         <div onClick={() => { setSelectedPhoto(null); setIsClickTriggered(false); }} style={{ position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: 'min(94vw, 560px)', maxHeight: '90vh', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ background: selectedPhoto.borderColor, borderRadius: '18px', padding: '16px', boxShadow: '0 24px 70px rgba(0,0,0,0.65)' }}>
-              <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}>
-                <img
-                  src={selectedPhoto.path}
-                  alt="Selected memory"
-                  style={{
-                    display: 'block',
-                    maxWidth: 'min(88vw, 528px)',
-                    maxHeight: '65vh',
-                    width: 'auto',
-                    height: 'auto',
-                    objectFit: 'contain'
-                  }}
-                />
-              </div>
-              <div style={{ marginTop: isMobile ? '10px' : '14px', padding: isMobile ? '6px 6px 0' : '10px 8px 0', textAlign: 'center', color: '#222', fontSize: isMobile ? '14px' : '16px', fontWeight: 600, letterSpacing: '0.5px' }}>
-                {selectedPhoto.message}
+            <div style={{ 
+              background: 'linear-gradient(180deg, #2a4a7a 0%, #1a3055 50%, #0d1a30 100%)', 
+              borderRadius: '22px', 
+              padding: '4px',
+              border: '1.5px solid rgba(80, 130, 180, 0.6)',
+              borderTopColor: 'rgba(150, 200, 255, 0.8)',
+              borderLeftColor: 'rgba(120, 170, 220, 0.7)',
+              boxShadow: '0 24px 70px rgba(0,0,0,0.65), 0 3px 10px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2), inset 1px 0 0 rgba(255,255,255,0.1)'
+            }}>
+              <div style={{ 
+                background: 'linear-gradient(180deg, rgba(42, 74, 122, 0.95) 0%, rgba(26, 48, 85, 0.98) 50%, rgba(13, 26, 48, 1) 100%)', 
+                borderRadius: '18px', 
+                padding: '16px',
+                border: '1px solid rgba(255, 255, 255, 0.15)'
+              }}>
+                <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                  <img
+                    src={selectedPhoto.path}
+                    alt="Selected memory"
+                    style={{
+                      display: 'block',
+                      maxWidth: 'min(88vw, 528px)',
+                      maxHeight: '65vh',
+                      width: 'auto',
+                      height: 'auto',
+                      objectFit: 'contain'
+                    }}
+                  />
+                </div>
+                <div style={{ marginTop: isMobile ? '10px' : '14px', padding: isMobile ? '6px 6px 0' : '10px 8px 0', textAlign: 'center', color: '#ffffff', fontSize: isMobile ? '14px' : '16px', fontWeight: 600, letterSpacing: '0.5px', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>
+                  {selectedPhoto.message}
+                </div>
               </div>
             </div>
 
