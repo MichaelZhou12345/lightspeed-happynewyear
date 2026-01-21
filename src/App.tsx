@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, Suspense } from 'react';
+import { useState, useMemo, useRef, useEffect, Suspense, useCallback } from 'react';
 import { Canvas, useFrame, extend, useThree, useLoader } from '@react-three/fiber';
 import {
   OrbitControls,
@@ -2276,23 +2276,13 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
       // 使用原始位置判断中轴线（弥散前的 x 和 z）
       const rawHorizontalDist = Math.sqrt(rawX * rawX + rawZ * rawZ);
       
-      // 先确定粒子大小
+      // 先确定粒子大小 - 去掉所有大颗粒子，保持小粒子效果
       if (distFromAxis < 1.5) {
-        // 核心中轴线：大粒子，只保留3%
-        if (Math.random() > 0.97) {
-          baseSize = 1.2 + Math.random() * 0.8;
-          isLargeWhite = true;
-        } else {
-          baseSize = 0.15 + Math.random() * 0.15;
-        }
+        // 核心中轴线：统一使用小粒子
+        baseSize = 0.15 + Math.random() * 0.15;
       } else if (distFromAxis < 2.5) {
-        // 过渡区域：大粒子，只保留4%
-        if (Math.random() > 0.96) {
-          baseSize = 0.9 + Math.random() * 0.6;
-          isLargeWhite = true;
-        } else {
-          baseSize = 0.12 + Math.random() * 0.12;
-        }
+        // 过渡区域：统一使用小粒子
+        baseSize = 0.12 + Math.random() * 0.12;
       } else if (typeRand > 0.92) {
         baseSize = 0.2 + Math.random() * 0.3;
       } else if (typeRand > 0.78) {
@@ -2304,12 +2294,8 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
         } else if (sizeR < 0.96) {
           baseSize = 0.5 + (sizeR - 0.8) * 2.5;
         } else {
-          if (axisDist < 3.0) {
-            baseSize = 1.2 + Math.pow((sizeR - 0.96) * 25.0, 1.5) * 0.8;
-            isLargeWhite = true;
-          } else {
-            baseSize = 0.4;
-          }
+          // 去掉大颗粒子，改为中等大小
+          baseSize = 0.4 + Math.random() * 0.2;
         }
       }
       
@@ -2349,7 +2335,7 @@ const BoltGlow = ({ state, isMobile }: { state: 'CHAOS' | 'FORMED'; isMobile?: b
         alpha: baseAlpha,
         random: Math.random(),
         speed: 0.5 + Math.random() * 1.5,
-        isWhite: isLargeWhite  // 只有大颗白色粒子才归类到白色层
+        isWhite: false  // 去掉大颗白色粒子，全部标记为非白色
       });
     }
     
@@ -6128,12 +6114,32 @@ export default function GrandTreeApp() {
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
   const [pinchActive, setPinchActive] = useState(false);
   const [isClickTriggered, setIsClickTriggered] = useState(false); // 新增：跟踪是否是点击触发的预览
+  const [showNoGestureHint, setShowNoGestureHint] = useState(false); // 新增：1分钟未检测到手势的提示
+  const hasDetectedGestureRef = useRef(false); // 新增：是否检测到过手势
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // 1分钟未检测到手势的提示计时器
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!hasDetectedGestureRef.current) {
+        setShowNoGestureHint(true);
+      }
+    }, 60000); // 60秒 = 1分钟
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 包装 setSceneState，检测到手势时标记并隐藏提示
+  const handleGesture = useCallback((state: 'CHAOS' | 'FORMED') => {
+    hasDetectedGestureRef.current = true;
+    setShowNoGestureHint(false);
+    setSceneState(state);
   }, []);
 
   useEffect(() => {
@@ -6148,25 +6154,6 @@ export default function GrandTreeApp() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', backgroundColor: '#000', position: 'relative', overflow: 'hidden' }}>
-      {/* 左上角 Logo */}
-      {sceneState === 'FORMED' && (
-        <img 
-          src="/lightspeed-logo.png" 
-          alt="Lightspeed Studios" 
-          style={{
-            position: 'absolute',
-            top: isMobile ? '12px' : '20px',
-            left: isMobile ? '12px' : '20px',
-            height: isMobile ? '40px' : '60px',
-            zIndex: 10,
-            pointerEvents: 'none',
-            opacity: 0.6,
-            filter: 'brightness(0.7)',
-            mixBlendMode: 'lighten',
-          }}
-        />
-      )}
-      
       {/* 烟花特效 - 已禁用 */}
       {/* <Fireworks visible={sceneState === 'FORMED'} /> */}
       
@@ -6196,7 +6183,7 @@ export default function GrandTreeApp() {
       />
       
       <GestureController
-        onGesture={setSceneState}
+        onGesture={handleGesture}
         onMove={setRotationSpeed}
         onMoveVertical={setRotationSpeedVertical}
         onStatus={setAiStatus}
@@ -6261,11 +6248,28 @@ export default function GrandTreeApp() {
       )}
 
       {/* UI - AI Status */}
-      <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: '32px', left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', zIndex: 10 }}>
         
         <div style={{ color: aiStatus.includes('ERROR') ? '#FF0000' : 'rgba(0, 240, 255, 0.5)', fontSize: '10px', letterSpacing: '2px', background: 'rgba(0,0,0,0.5)', padding: '4px 8px', borderRadius: '4px' }}>
           {aiStatus}
         </div>
+        
+        {/* 1分钟未检测到手势的提示 */}
+        {showNoGestureHint && (
+          <div style={{ 
+            color: 'rgba(0, 240, 255, 0.5)', 
+            fontSize: '10px', 
+            letterSpacing: '1px', 
+            background: 'rgba(0,0,0,0.5)', 
+            padding: '4px 8px', 
+            borderRadius: '4px',
+            textAlign: 'center',
+            maxWidth: '280px',
+            lineHeight: '1.4'
+          }}>
+            未检测到手势，请检查摄像头或者查看下方操作指引哦
+          </div>
+        )}
       </div>
     </div>
   );
