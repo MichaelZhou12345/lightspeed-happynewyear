@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>光子新年活动</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+
+        .page-container {
+            width: 100%;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* 背景图铺满 */
+        .bg-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* 透明可点击区域 */
+        .click-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .click-area {
+            position: absolute;
+            cursor: pointer;
+            pointer-events: auto;
+            /* 调试用，可以取消注释看点击区域 */
+            /* background: rgba(255, 0, 0, 0.3); */
+        }
+
+        /* 立即参与按钮位置 */
+        .join-btn-area {
+            left: 18%;
+            width: 64%;
+            height: 4.5%;
+            top: 70.5%;
+        }
+
+        /* 奖品一览 */
+        .prize-list-area {
+            left: 5%;
+            width: 28%;
+            height: 6.5%;
+            top: 79%;
+        }
+
+        /* 中奖查询 */
+        .check-prize-area {
+            left: 36%;
+            width: 28%;
+            height: 6.5%;
+            top: 79%;
+        }
+
+        /* 活动规则 */
+        .rules-area {
+            left: 67%;
+            width: 28%;
+            height: 6.5%;
+            top: 79%;
+        }
+
+        /* 弹窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            width: 85%;
+            max-width: 320px;
+            background: linear-gradient(180deg, #1e3a6e 0%, #0d1a3a 100%);
+            border: 2px solid rgba(100, 180, 255, 0.5);
+            border-radius: 16px;
+            padding: 20px;
+            position: relative;
+            max-height: 75vh;
+            overflow-y: auto;
+            box-shadow: 0 0 40px rgba(100, 150, 255, 0.3);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-title {
+            text-align: center;
+            font-size: 18px;
+            color: #fff;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(100, 180, 255, 0.3);
+        }
+
+        .modal-body {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        /* 奖品展示 */
+        .prize-showcase {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+        }
+
+        .prize-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .prize-image-container {
+            width: 200px;
+            height: 200px;
+            background: linear-gradient(145deg, rgba(30, 58, 138, 0.3) 0%, rgba(59, 130, 246, 0.2) 100%);
+            border: 2px solid rgba(59, 130, 246, 0.4);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            box-shadow: 
+                0 0 30px rgba(59, 130, 246, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .prize-image {
+            width: 160px;
+            height: 160px;
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .doll-emoji {
+            font-size: 80px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+
+        .doll-text {
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        .prize-name {
+            font-size: 18px;
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        /* 未中奖 */
+        .no-prize {
+            text-align: center;
+            padding: 30px 15px;
+        }
+
+        .no-prize-icon {
+            font-size: 50px;
+            margin-bottom: 15px;
+        }
+
+        .no-prize-text {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 15px;
+        }
+
+        /* 活动规则 */
+        .rules-content p {
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <!-- 整页背景图 -->
+        <img src="assets/main-bg.png" alt="主站页面" class="bg-image">
+        
+        <!-- 透明点击层 -->
+        <div class="click-layer">
+            <div class="click-area join-btn-area" id="joinBtn"></div>
+            <div class="click-area prize-list-area" id="prizeListBtn"></div>
+            <div class="click-area check-prize-area" id="checkPrizeBtn"></div>
+            <div class="click-area rules-area" id="rulesBtn"></div>
+        </div>
+    </div>
+
+    <!-- 奖品一览弹窗 -->
+    <div class="modal-overlay" id="prizeListModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('prizeListModal')">×</button>
+            <h3 class="modal-title">奖品一览</h3>
+            <div class="modal-body">
+                <div class="prize-showcase">
+                    <div class="prize-title">马年公仔</div>
+                    <div class="prize-image-container">
+                        <div class="prize-image">
+                            <img src="assets/horse-doll.jpg" alt="马年公仔" style="width: 140px; height: 140px; object-fit: contain; border-radius: 10px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; color: white;">
+                                <div style="font-size: 60px; margin-bottom: 10px;">🧸</div>
+                                <div style="font-size: 12px; text-align: center;">马年公仔<br>毛绒玩偶</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 中奖查询弹窗 -->
+    <div class="modal-overlay" id="checkPrizeModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('checkPrizeModal')">×</button>
+            <h3 class="modal-title">🔍 中奖查询</h3>
+            <div class="modal-body">
+                <div class="no-prize">
+                    <div class="no-prize-icon">😢</div>
+                    <p class="no-prize-text">暂无中奖记录</p>
+                    <p class="no-prize-text" style="font-size: 12px; margin-top: 10px; opacity: 0.7;">快去参与活动，赢取丰厚奖品吧！</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 活动规则弹窗 -->
+    <div class="modal-overlay" id="rulesModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('rulesModal')">×</button>
+            <h3 class="modal-title">📋 活动规则</h3>
+            <div class="modal-body rules-content">
+                <p>1. 活动时间：2026年2月10日10:00-2026年2月23日23:59。</p>
+                <p>2. 活动期间，用户可通过摄像头进行手势交互参与活动，获取来自大家的祝福、更有概率获得精美周边礼品哦！</p>
+                <p>3. 每位用户拥有3次抽奖机会，最多可获取1次周边奖励，抽满三次后，仍可继续参与，查看新年祝福。</p>
+                <p>4. 中奖后，请截图带奖励码的页面，或保存您的奖励码，联系发奖小助手QQ兑换奖励。</p>
+                <p>5. 请注意，奖励码只能兑换1次奖励，无法重复兑换，发奖小助手将为首个提供奖励码的用户发放奖励，请用户避免泄露。</p>
+                <p>6. 本次活动页面体验均为AI完成，解释权归腾讯公司光子工作室所有。</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('joinBtn').addEventListener('click', function() {
+            window.location.href = 'loading.html';
+        });
+
+        document.getElementById('prizeListBtn').addEventListener('click', function() {
+            document.getElementById('prizeListModal').classList.add('active');
+        });
+
+        document.getElementById('checkPrizeBtn').addEventListener('click', function() {
+            document.getElementById('checkPrizeModal').classList.add('active');
+        });
+
+        document.getElementById('rulesBtn').addEventListener('click', function() {
+            document.getElementById('rulesModal').classList.add('active');
+        });
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(function(modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

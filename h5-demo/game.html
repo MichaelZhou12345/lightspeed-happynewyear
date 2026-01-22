@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>光子新年活动 - 互动</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #0a0e27;
+            font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+        }
+
+        .page-container {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+
+        .bg-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: top center;
+        }
+
+        /* 透明点击层 */
+        .click-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .click-area {
+            position: absolute;
+            cursor: pointer;
+            pointer-events: auto;
+            /* background: rgba(255, 0, 0, 0.3); */
+        }
+
+        /* 操作指引按钮位置 */
+        .guide-btn-area {
+            left: 25%;
+            width: 50%;
+            height: 5%;
+            top: 85%;
+        }
+
+        /* 一键进群按钮位置 */
+        .join-group-area {
+            left: 25%;
+            width: 50%;
+            height: 5%;
+            top: 92%;
+        }
+
+        /* 顶部返回按钮 */
+        .top-back-btn {
+            position: absolute;
+            top: 12%;
+            left: 5%;
+            width: 15%;
+            height: 4%;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+
+        /* ========== 操作指引弹窗 ========== */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .guide-modal {
+            width: 90%;
+            max-width: 360px;
+            background: linear-gradient(180deg, #1a2a5e 0%, #0d1a3a 100%);
+            border: 2px solid rgba(100, 150, 200, 0.4);
+            border-radius: 20px;
+            padding: 28px 24px;
+            position: relative;
+            box-shadow: 
+                0 0 60px rgba(50, 100, 200, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: -15px;
+            right: -15px;
+            width: 40px;
+            height: 40px;
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close::before,
+        .modal-close::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        .modal-close::before {
+            transform: rotate(45deg);
+        }
+
+        .modal-close::after {
+            transform: rotate(-45deg);
+        }
+
+        .guide-title {
+            text-align: center;
+            font-size: 26px;
+            font-weight: bold;
+            background: linear-gradient(180deg, #FFD700 0%, #FFA500 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 24px;
+            letter-spacing: 4px;
+        }
+
+        .guide-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .guide-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .guide-icon {
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(100, 150, 200, 0.5);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            flex-shrink: 0;
+            background: rgba(20, 40, 80, 0.5);
+        }
+
+        .guide-content {
+            flex: 1;
+        }
+
+        .guide-content h4 {
+            font-size: 16px;
+            margin-bottom: 6px;
+        }
+
+        .guide-content h4 .gold {
+            background: linear-gradient(180deg, #FFD700 0%, #FFA500 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .guide-content h4 .blue {
+            color: #60A5FA;
+        }
+
+        .guide-content p {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.5;
+        }
+
+        .guide-footer {
+            text-align: center;
+            margin-top: 24px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* 返回按钮 */
+        .back-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(180deg, rgba(30, 58, 138, 0.8) 0%, rgba(23, 37, 84, 0.9) 100%);
+            border: 2px solid rgba(96, 165, 250, 0.5);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .back-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.5);
+        }
+
+        .back-btn::before {
+            content: '';
+            width: 12px;
+            height: 12px;
+            border-left: 3px solid #fff;
+            border-bottom: 3px solid #fff;
+            transform: rotate(45deg) translateX(2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="page-container">
+        <img src="assets/new-game-page.jpg" alt="交互界面" class="bg-image">
+        
+        <!-- 透明点击层 -->
+        <div class="click-layer">
+            <div class="click-area top-back-btn" onclick="window.location.href='index.html'"></div>
+            <div class="click-area guide-btn-area" id="guideBtn"></div>
+            <div class="click-area join-group-area" id="joinGroupBtn"></div>
+        </div>
+    </div>
+
+    <!-- 操作指引弹窗 -->
+    <div class="modal-overlay" id="guideModal">
+        <div class="guide-modal">
+            <button class="modal-close" id="closeBtn"></button>
+            
+            <h2 class="guide-title">操作步骤</h2>
+            
+            <div class="guide-list">
+                <div class="guide-item">
+                    <div class="guide-icon">🖐️</div>
+                    <div class="guide-content">
+                        <h4><span class="gold">操作手势</span> | <span class="blue">获取祝福与神秘好礼</span></h4>
+                        <p>通过手势交互，获取来自大家的新年祝福</p>
+                    </div>
+                </div>
+                
+                <div class="guide-item">
+                    <div class="guide-icon">👌</div>
+                    <div class="guide-content">
+                        <h4><span class="gold">捏合手指</span> | <span class="blue">抓取祝福</span></h4>
+                        <p>捏合手指进行抓取，有机会获得精美周边礼品</p>
+                    </div>
+                </div>
+                
+                <div class="guide-item">
+                    <div class="guide-icon">🎁</div>
+                    <div class="guide-content">
+                        <h4><span class="gold">抽奖机会</span> | <span class="blue">3次机会</span></h4>
+                        <p>每位用户拥有3次抽奖机会，最多获得1次周边奖励</p>
+                    </div>
+                </div>
+            </div>
+            
+            <p class="guide-footer">也可以点击画面按钮进行抽取</p>
+        </div>
+    </div>
+
+    <script>
+        // 操作指引按钮
+        document.getElementById('guideBtn').addEventListener('click', function() {
+            document.getElementById('guideModal').classList.add('active');
+        });
+
+        // 关闭弹窗
+        document.getElementById('closeBtn').addEventListener('click', function() {
+            document.getElementById('guideModal').classList.remove('active');
+        });
+
+        // 点击遮罩关闭
+        document.getElementById('guideModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.remove('active');
+            }
+        });
+
+        // 一键进群
+        document.getElementById('joinGroupBtn').addEventListener('click', function() {
+            alert('即将跳转到群聊...');
+        });
+    </script>
+</body>
+</html>
