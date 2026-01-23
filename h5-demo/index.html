@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>光子新年活动</title>
+    <title>光子宇宙的新年祝福</title>
     <style>
         * {
             margin: 0;
@@ -21,12 +21,16 @@
             width: 100%;
             min-height: 100vh;
             position: relative;
+            background: linear-gradient(180deg, #0a0e27 0%, #1a1f3a 50%, #2a2f4a 100%);
         }
 
-        /* 背景图铺满 */
+        /* 背景图铺满 - 临时使用渐变背景，你需要把设计图保存为 new-main-bg.png */
         .bg-image {
             width: 100%;
             height: auto;
+            min-height: 100vh;
+            object-fit: cover;
+            object-position: center;
             display: block;
         }
 
@@ -48,36 +52,36 @@
             /* background: rgba(255, 0, 0, 0.3); */
         }
 
-        /* 立即参与按钮位置 */
+        /* 立即参与按钮位置 - 根据新设计调整 */
         .join-btn-area {
-            left: 18%;
-            width: 64%;
-            height: 4.5%;
-            top: 70.5%;
+            left: 15%;
+            width: 70%;
+            height: 6%;
+            top: 72%;
         }
 
-        /* 奖品一览 */
+        /* 奖品一览 - 左下角 */
         .prize-list-area {
-            left: 5%;
-            width: 28%;
-            height: 6.5%;
-            top: 79%;
+            left: 8%;
+            width: 25%;
+            height: 8%;
+            top: 85%;
         }
 
-        /* 中奖查询 */
+        /* 中奖查询 - 中下角 */
         .check-prize-area {
-            left: 36%;
-            width: 28%;
-            height: 6.5%;
-            top: 79%;
+            left: 37.5%;
+            width: 25%;
+            height: 8%;
+            top: 85%;
         }
 
-        /* 活动规则 */
+        /* 活动规则 - 右下角 */
         .rules-area {
             left: 67%;
-            width: 28%;
-            height: 6.5%;
-            top: 79%;
+            width: 25%;
+            height: 8%;
+            top: 85%;
         }
 
         /* 弹窗样式 */
@@ -235,8 +239,8 @@
 </head>
 <body>
     <div class="page-container">
-        <!-- 整页背景图 -->
-        <img src="assets/main-bg.png" alt="主站页面" class="bg-image">
+        <!-- 使用你的设计图作为背景 -->
+        <img src="assets/主站页面.png" alt="光子宇宙新年祝福" class="bg-image">
         
         <!-- 透明点击层 -->
         <div class="click-layer">
