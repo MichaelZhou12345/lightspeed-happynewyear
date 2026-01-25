@@ -499,6 +499,225 @@
             font-size: 14px;
             font-weight: bold;
         }
+
+        /* 交互页面样式 */
+        .interact-page {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: 2000;
+            background: #0a0612;
+        }
+
+        .interact-page.active {
+            display: block;
+        }
+
+        .interact-full-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -1;
+        }
+
+        .interact-back-btn {
+            position: fixed;
+            top: 50px;
+            left: 35px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            z-index: 2100;
+        }
+
+        .interact-back-btn img {
+            width: 45px;
+            height: auto;
+        }
+
+        .interact-container {
+            max-width: 393px;
+            margin: 0 auto;
+            min-height: 100vh;
+            position: relative;
+            padding: 100px 16px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .interact-title {
+            width: 80%;
+            max-width: 280px;
+            margin-bottom: 15px;
+        }
+
+        .interact-camera {
+            width: 100%;
+            max-width: 260px;
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+
+        .interact-buttons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .interact-buttons img {
+            width: 120px;
+            height: auto;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .interact-buttons img:hover {
+            transform: scale(1.05);
+        }
+
+        .interact-group-text {
+            width: 140px;
+            margin-bottom: 10px;
+        }
+
+        .interact-group-btn {
+            width: 100px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .interact-group-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 操作指引弹窗 */
+        .guide-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .guide-modal-overlay.active {
+            display: flex;
+        }
+
+        .guide-modal-content {
+            max-width: 320px;
+            width: 85%;
+        }
+
+        .guide-modal-img {
+            width: 100%;
+            height: auto;
+            cursor: pointer;
+        }
+
+        /* 寄语弹窗 */
+        .message-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 3000;
+        }
+
+        .message-modal-overlay.active {
+            display: block;
+        }
+
+        .message-modal-img {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            /* 调节弹窗图片位置 */
+            top: 200px;
+            width: 85%;
+            max-width: 320px;
+            height: auto;
+        }
+
+        .message-share-btn {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            /* 调节分享祝福按钮位置 */
+            bottom: 180px;
+            width: 140px;
+            height: auto;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .message-share-btn:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        .message-win-btn {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            /* 调节中奖了按钮位置 */
+            bottom: 120px;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);
+            border: none;
+            color: white;
+            padding: 10px 30px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .message-win-btn:hover {
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        /* 中奖弹窗 */
+        .win-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 3100;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .win-modal-overlay.active {
+            display: flex;
+        }
+
+        .win-modal-img {
+            width: 85%;
+            max-width: 320px;
+            height: auto;
+            cursor: pointer;
+            mix-blend-mode: lighten;
+        }
     </style>
 </head>
 <body>
@@ -573,6 +792,56 @@
         
         <!-- 全屏背景 -->
         <img src="../loading页面/image 53.png" alt="背景" class="loading-full-bg">
+    </div>
+
+    <!-- 交互页面 -->
+    <div class="interact-page" id="interactPage">
+        <!-- 返回按钮 -->
+        <button class="interact-back-btn" onclick="goBackFromInteract()">
+            <img src="../交互界面2/返回.png" alt="返回">
+        </button>
+        
+        <div class="interact-container">
+            <!-- 标题文字 -->
+            <img src="../交互界面2/操作手势，获取光子送来的祝福与神秘好礼！.png" alt="操作手势，获取光子送来的祝福与神秘好礼" class="interact-title">
+            
+            <!-- 摄像头画面 -->
+            <img src="../交互界面2/企业微信截图_90ca24f8-e862-4e57-90f6-5a0557fad8a9 2.png" alt="摄像头画面" class="interact-camera" onclick="showMessageModal()">
+            
+            <!-- 操作指引和重新授权按钮 -->
+            <div class="interact-buttons">
+                <img src="../交互界面2/操作指引.png" alt="操作指引" onclick="showGuideModal()">
+                <img src="../交互界面2/重新授权.png?v=2" alt="重新授权">
+            </div>
+            
+            <!-- 进群提示文字 -->
+            <img src="../交互界面2/进群获取更多福利与资讯.png" alt="进群获取更多福利与资讯" class="interact-group-text">
+            
+            <!-- 一键进群按钮 -->
+            <img src="../交互界面2/一键进群.png" alt="一键进群" class="interact-group-btn">
+        </div>
+        
+        <!-- 全屏背景使用loading页面的背景 -->
+        <img src="../loading页面/image 53.png" alt="背景" class="interact-full-bg">
+        
+        <!-- 操作指引弹窗 -->
+        <div class="guide-modal-overlay" id="guideModal">
+            <div class="guide-modal-content">
+                <img src="../交互界面3/Group 2119902018.png" alt="操作指引" class="guide-modal-img" onclick="closeGuideModal()">
+            </div>
+        </div>
+        
+        <!-- 寄语弹窗 -->
+        <div class="message-modal-overlay" id="messageModal">
+            <img src="../寄语弹窗/寄语弹窗.png" alt="寄语弹窗" class="message-modal-img">
+            <img src="../寄语弹窗/分享祝福.png" alt="分享祝福" class="message-share-btn">
+            <button class="message-win-btn" onclick="showWinModal()">中奖了</button>
+        </div>
+        
+        <!-- 中奖弹窗 -->
+        <div class="win-modal-overlay" id="winModal">
+            <img src="../中奖页面/中奖画面.png" alt="中奖画面" class="win-modal-img" onclick="closeWinModal()">
+        </div>
     </div>
 
     <!-- 奖品一览弹窗 -->
@@ -657,6 +926,7 @@
         const lotteryModal = document.getElementById('lotteryModal');
         const rulesModal = document.getElementById('rulesModal');
         const loadingPage = document.getElementById('loadingPage');
+        const interactPage = document.getElementById('interactPage');
         const participateBtn = document.querySelector('.participate-btn img');
         const prizeBtn = document.querySelector('.bottom-actions img[alt="奖品一览"]');
         const lotteryBtn = document.querySelector('.bottom-actions img[alt="中奖查询"]');
@@ -672,6 +942,46 @@
         // 返回首页
         function goBack() {
             loadingPage.classList.remove('active');
+        }
+
+        // 从交互页面返回首页
+        function goBackFromInteract() {
+            interactPage.classList.remove('active');
+        }
+
+        // 显示交互页面
+        function showInteractPage() {
+            interactPage.classList.add('active');
+        }
+
+        // 显示操作指引弹窗
+        function showGuideModal() {
+            document.getElementById('guideModal').classList.add('active');
+        }
+
+        // 关闭操作指引弹窗
+        function closeGuideModal() {
+            document.getElementById('guideModal').classList.remove('active');
+        }
+
+        // 显示寄语弹窗
+        function showMessageModal() {
+            document.getElementById('messageModal').classList.add('active');
+        }
+
+        // 关闭寄语弹窗
+        function closeMessageModal() {
+            document.getElementById('messageModal').classList.remove('active');
+        }
+
+        // 显示中奖弹窗
+        function showWinModal() {
+            document.getElementById('winModal').classList.add('active');
+        }
+
+        // 关闭中奖弹窗
+        function closeWinModal() {
+            document.getElementById('winModal').classList.remove('active');
         }
 
         // 显示loading页面
@@ -691,10 +1001,10 @@
                 if (progress >= 100) {
                     progress = 100;
                     clearInterval(interval);
-                    // 加载完成后可以跳转到其他页面或显示结果
+                    // 加载完成后跳转到交互页面
                     setTimeout(() => {
                         loadingPage.classList.remove('active');
-                        alert('加载完成！'); // 这里可以替换为跳转到活动页面
+                        showInteractPage();
                     }, 500);
                 }
                 
@@ -756,6 +1066,27 @@
         rulesModal.addEventListener('click', function(e) {
             if (e.target === rulesModal) {
                 closeModal('rulesModal');
+            }
+        });
+
+        // 点击遮罩关闭操作指引弹窗
+        document.getElementById('guideModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeGuideModal();
+            }
+        });
+
+        // 点击遮罩关闭寄语弹窗
+        document.getElementById('messageModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeMessageModal();
+            }
+        });
+
+        // 点击遮罩关闭中奖弹窗
+        document.getElementById('winModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeWinModal();
             }
         });
     </script>
