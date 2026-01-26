@@ -762,6 +762,12 @@
             <img src="main/lottery-query.png" alt="中奖查询" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
             <img src="main/activity-rules.png" alt="活动规则" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
         </section>
+        
+        <!-- 已中奖按钮 和 未用移动端打开按钮 -->
+        <div style="display: flex; justify-content: center; gap: 15px; margin-top: 20px;">
+            <button id="wonPrizeBtn" style="background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%); border: none; color: white; padding: 8px 20px; border-radius: 15px; font-size: 12px; cursor: pointer;">已中奖</button>
+            <button id="nonMobileBtn" style="background: linear-gradient(135deg, #6b8cff 0%, #53d4ff 100%); border: none; color: white; padding: 8px 20px; border-radius: 15px; font-size: 12px; cursor: pointer;">未用移动端打开</button>
+        </div>
     </div>
 
     <!-- 登录弹窗 -->
@@ -890,6 +896,25 @@
         </div>
     </div>
 
+    <!-- 已中奖弹窗 -->
+    <div class="modal-overlay" id="wonPrizeModal">
+        <div class="modal-content" style="position: relative; display: flex; flex-direction: column; align-items: center;">
+            <img src="lottery-query/won-prize.png" alt="恭喜您中奖" style="width: 100%; max-width: 320px;" onclick="closeModal('wonPrizeModal')">
+            <div style="position: absolute; top: 26%; left: 50%; transform: translateX(-50%); color: #ffd700; font-size: 16px; font-weight: bold;">奖励码：XXXXX</div>
+        </div>
+    </div>
+
+    <!-- 未用移动端打开弹窗 -->
+    <div class="modal-overlay" id="nonMobileModal">
+        <div class="modal-content" style="position: relative;">
+            <img src="non-mobile-login/non-mobile.png" alt="未用移动端打开" style="width: 100%; max-width: 320px;" onclick="closeModal('nonMobileModal')">
+            <div style="position: absolute; top: 34%; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; white-space: nowrap;">
+                <span id="linkText" style="color: #000; font-size: 12px; font-weight: bold;">https://example.com/xxx</span>
+                <span onclick="copyLink()" style="color: #1890ff; font-size: 12px; cursor: pointer; font-weight: bold; white-space: nowrap;">复制链接</span>
+            </div>
+        </div>
+    </div>
+
     <!-- 活动规则弹窗 -->
     <div class="modal-overlay" id="rulesModal">
         <div class="rules-modal-content">
@@ -941,12 +966,16 @@
         const loginModal = document.getElementById('loginModal');
         const prizeModal = document.getElementById('prizeModal');
         const lotteryModal = document.getElementById('lotteryModal');
+        const wonPrizeModal = document.getElementById('wonPrizeModal');
         const rulesModal = document.getElementById('rulesModal');
         const loadingPage = document.getElementById('loadingPage');
         const interactPage = document.getElementById('interactPage');
         const participateBtn = document.querySelector('.participate-btn img');
         const prizeBtn = document.querySelector('.bottom-actions img[alt="奖品一览"]');
         const lotteryBtn = document.querySelector('.bottom-actions img[alt="中奖查询"]');
+        const wonPrizeBtn = document.getElementById('wonPrizeBtn');
+        const nonMobileBtn = document.getElementById('nonMobileBtn');
+        const nonMobileModal = document.getElementById('nonMobileModal');
         const rulesBtn = document.querySelector('.bottom-actions img[alt="活动规则"]');
 
         // 处理登录
@@ -964,6 +993,14 @@
         // 从交互页面返回首页
         function goBackFromInteract() {
             interactPage.classList.remove('active');
+        }
+
+        // 复制链接
+        function copyLink() {
+            const linkText = document.getElementById('linkText').innerText;
+            navigator.clipboard.writeText(linkText).then(function() {
+                alert('链接已复制');
+            });
         }
 
         // 显示交互页面
@@ -1051,9 +1088,19 @@
             lotteryModal.classList.add('active');
         });
 
+        // 点击已中奖按钮
+        wonPrizeBtn.addEventListener('click', function() {
+            wonPrizeModal.classList.add('active');
+        });
+
         // 点击活动规则按钮
         rulesBtn.addEventListener('click', function() {
             rulesModal.classList.add('active');
+        });
+
+        // 点击未用移动端打开按钮
+        nonMobileBtn.addEventListener('click', function() {
+            nonMobileModal.classList.add('active');
         });
 
         // 关闭弹窗
@@ -1077,6 +1124,18 @@
         lotteryModal.addEventListener('click', function(e) {
             if (e.target === lotteryModal) {
                 closeModal('lotteryModal');
+            }
+        });
+
+        wonPrizeModal.addEventListener('click', function(e) {
+            if (e.target === wonPrizeModal) {
+                closeModal('wonPrizeModal');
+            }
+        });
+
+        nonMobileModal.addEventListener('click', function(e) {
+            if (e.target === nonMobileModal) {
+                closeModal('nonMobileModal');
             }
         });
 
