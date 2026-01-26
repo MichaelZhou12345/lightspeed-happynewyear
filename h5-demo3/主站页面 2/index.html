@@ -14,7 +14,7 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             /* 背景图作为最底层 */
-            background: url('背景图.png') center top / contain no-repeat;
+            background: url('main/背景图.png') center top / contain no-repeat;
             background-color: #0a0612;
             min-height: 100vh;
             color: white;
@@ -712,11 +712,25 @@
         }
 
         .win-modal-img {
-            width: 85%;
-            max-width: 320px;
+            width: 100%;
+            max-width: 500px;
             height: auto;
             cursor: pointer;
             mix-blend-mode: lighten;
+        }
+
+        .win-modal-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .win-code {
+            color: #ffd700;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 15px;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
         }
     </style>
 </head>
@@ -729,31 +743,31 @@
 
         <!-- 主标题区域 -->
         <section class="hero-section">
-            <img src="Group 2119902036.png" alt="光子宇宙的新年祝福" style="width: 100%; max-width: 350px; height: auto;">
+            <img src="main/Group 2119902036.png" alt="光子宇宙的新年祝福" style="width: 100%; max-width: 350px; height: auto;">
         </section>
 
         <!-- 主卡片 -->
         <section class="main-card">
-            <img src="image 41.png" alt="宇宙背景">
+            <img src="main/image 41.png" alt="宇宙背景">
         </section>
 
         <!-- 立即参与按钮 -->
         <section class="participate-btn">
-            <img src="Group 2119902035.png" alt="立即参与">
+            <img src="main/Group 2119902035.png" alt="立即参与">
         </section>
 
         <!-- 底部功能区 -->
         <section class="bottom-actions">
-            <img src="奖品一览.png" alt="奖品一览" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-            <img src="中奖查询.png" alt="中奖查询" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-            <img src="活动规则.png" alt="活动规则" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            <img src="main/奖品一览.png" alt="奖品一览" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            <img src="main/中奖查询.png" alt="中奖查询" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
+            <img src="main/活动规则.png" alt="活动规则" style="width: 60px; height: auto; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
         </section>
     </div>
 
     <!-- 登录弹窗 -->
     <div class="modal-overlay" id="loginModal">
         <div class="modal-content">
-            <img src="../用户未登录点击参与/Group 2119902030.png" alt="请先登录" onclick="handleLogin()">
+            <img src="login-prompt/Group 2119902030.png" alt="请先登录" onclick="handleLogin()">
         </div>
     </div>
 
@@ -761,7 +775,7 @@
     <div class="loading-page" id="loadingPage">
         <!-- 返回按钮固定在左上角 -->
         <button class="loading-back-btn-fixed" onclick="goBack()">
-            <img src="../loading页面/Group 2119902065.png" alt="返回">
+            <img src="loading/Group 2119902065.png" alt="返回">
         </button>
         
         <!-- 右上角登录按钮 -->
@@ -775,7 +789,7 @@
 
             <!-- 主卡片 - 和首页完全一样的结构 -->
             <section class="main-card">
-                <img src="../loading页面/image 42.png" alt="闪电装饰">
+                <img src="loading/image 42.png" alt="闪电装饰">
             </section>
 
             <!-- Loading进度区域 - 替代首页的参与按钮位置 -->
@@ -791,69 +805,72 @@
         </div>
         
         <!-- 全屏背景 -->
-        <img src="../loading页面/image 53.png" alt="背景" class="loading-full-bg">
+        <img src="loading/image 53.png" alt="背景" class="loading-full-bg">
     </div>
 
     <!-- 交互页面 -->
     <div class="interact-page" id="interactPage">
         <!-- 返回按钮 -->
         <button class="interact-back-btn" onclick="goBackFromInteract()">
-            <img src="../交互界面2/返回.png" alt="返回">
+            <img src="interact2/返回.png" alt="返回">
         </button>
         
         <div class="interact-container">
             <!-- 标题文字 -->
-            <img src="../交互界面2/操作手势，获取光子送来的祝福与神秘好礼！.png" alt="操作手势，获取光子送来的祝福与神秘好礼" class="interact-title">
+            <img src="interact2/操作手势，获取光子送来的祝福与神秘好礼！.png" alt="操作手势，获取光子送来的祝福与神秘好礼" class="interact-title">
             
             <!-- 摄像头画面 -->
-            <img src="../交互界面2/企业微信截图_90ca24f8-e862-4e57-90f6-5a0557fad8a9 2.png" alt="摄像头画面" class="interact-camera" onclick="showMessageModal()">
+            <img src="interact2/企业微信截图_90ca24f8-e862-4e57-90f6-5a0557fad8a9 2.png" alt="摄像头画面" class="interact-camera" onclick="showMessageModal()">
             
             <!-- 操作指引和重新授权按钮 -->
             <div class="interact-buttons">
-                <img src="../交互界面2/操作指引.png" alt="操作指引" onclick="showGuideModal()">
-                <img src="../交互界面2/重新授权.png?v=2" alt="重新授权">
+                <img src="interact2/操作指引.png" alt="操作指引" onclick="showGuideModal()">
+                <img src="interact2/重新授权.png?v=2" alt="重新授权">
             </div>
             
             <!-- 进群提示文字 -->
-            <img src="../交互界面2/进群获取更多福利与资讯.png" alt="进群获取更多福利与资讯" class="interact-group-text">
+            <img src="interact2/进群获取更多福利与资讯.png" alt="进群获取更多福利与资讯" class="interact-group-text">
             
             <!-- 一键进群按钮 -->
-            <img src="../交互界面2/一键进群.png" alt="一键进群" class="interact-group-btn">
+            <img src="interact2/一键进群.png" alt="一键进群" class="interact-group-btn">
         </div>
         
         <!-- 全屏背景使用loading页面的背景 -->
-        <img src="../loading页面/image 53.png" alt="背景" class="interact-full-bg">
+        <img src="loading/image 53.png" alt="背景" class="interact-full-bg">
         
         <!-- 操作指引弹窗 -->
         <div class="guide-modal-overlay" id="guideModal">
             <div class="guide-modal-content">
-                <img src="../交互界面3/Group 2119902018.png" alt="操作指引" class="guide-modal-img" onclick="closeGuideModal()">
+                <img src="interact3/Group 2119902018.png" alt="操作指引" class="guide-modal-img" onclick="closeGuideModal()">
             </div>
         </div>
         
         <!-- 寄语弹窗 -->
         <div class="message-modal-overlay" id="messageModal">
-            <img src="../寄语弹窗/寄语弹窗.png" alt="寄语弹窗" class="message-modal-img">
-            <img src="../寄语弹窗/分享祝福.png" alt="分享祝福" class="message-share-btn">
+            <img src="message-popup/寄语弹窗.png" alt="寄语弹窗" class="message-modal-img">
+            <img src="message-popup/分享祝福.png" alt="分享祝福" class="message-share-btn">
             <button class="message-win-btn" onclick="showWinModal()">中奖了</button>
         </div>
         
         <!-- 中奖弹窗 -->
         <div class="win-modal-overlay" id="winModal">
-            <img src="../中奖页面/中奖画面.png" alt="中奖画面" class="win-modal-img" onclick="closeWinModal()">
+            <div class="win-modal-content">
+                <img src="winning/中奖.png" alt="中奖画面" class="win-modal-img" onclick="closeWinModal()">
+                <div class="win-code">中奖码：XXXXXXXX</div>
+            </div>
         </div>
     </div>
 
     <!-- 奖品一览弹窗 -->
     <div class="modal-overlay" id="prizeModal">
         <div class="prize-modal-content">
-            <img src="../奖品一览/关闭.png" alt="关闭" class="prize-close-btn" onclick="closeModal('prizeModal')">
+            <img src="prizes/关闭.png" alt="关闭" class="prize-close-btn" onclick="closeModal('prizeModal')">
             <div class="prize-box">
-                <img src="../奖品一览/Group 2119902024.png" alt="弹窗背景" class="prize-box-bg">
+                <img src="prizes/Group 2119902024.png" alt="弹窗背景" class="prize-box-bg">
                 <div class="prize-inner">
-                    <img src="../奖品一览/奖品一览.png" alt="奖品一览" class="prize-title">
-                    <img src="../奖品一览/马年公仔.png" alt="马年公仔" class="prize-label">
-                    <img src="../奖品一览/image 56.png" alt="马年公仔图片" class="prize-doll">
+                    <img src="prizes/奖品一览.png" alt="奖品一览" class="prize-title">
+                    <img src="prizes/马年公仔.png" alt="马年公仔" class="prize-label">
+                    <img src="prizes/image 56.png" alt="马年公仔图片" class="prize-doll">
                 </div>
             </div>
         </div>
@@ -863,11 +880,11 @@
     <div class="modal-overlay" id="lotteryModal">
         <div class="lottery-modal-content">
             <div class="lottery-box">
-                <img src="../中奖查询/Group 2119902024.png" alt="弹窗背景" class="lottery-box-bg">
-                <img src="../中奖查询/关闭-1.png" alt="关闭" class="lottery-close-btn" onclick="closeModal('lotteryModal')">
+                <img src="lottery-query/Group 2119902024.png" alt="弹窗背景" class="lottery-box-bg">
+                <img src="lottery-query/关闭-1.png" alt="关闭" class="lottery-close-btn" onclick="closeModal('lotteryModal')">
                 <div class="lottery-inner">
-                    <img src="../中奖查询/中奖查询-1.png" alt="中奖查询" class="lottery-title">
-                    <img src="../中奖查询/不好意思，您未中奖.png" alt="不好意思，您未中奖" class="lottery-text">
+                    <img src="lottery-query/中奖查询-1.png" alt="中奖查询" class="lottery-title">
+                    <img src="lottery-query/不好意思，您未中奖.png" alt="不好意思，您未中奖" class="lottery-text">
                 </div>
             </div>
         </div>
@@ -877,10 +894,10 @@
     <div class="modal-overlay" id="rulesModal">
         <div class="rules-modal-content">
             <div class="rules-box">
-                <img src="../奖品一览/Group 2119902024.png" alt="弹窗背景" class="rules-box-bg">
-                <img src="../奖品一览/关闭.png" alt="关闭" class="rules-close-btn" onclick="closeModal('rulesModal')">
+                <img src="prizes/Group 2119902024.png" alt="弹窗背景" class="rules-box-bg">
+                <img src="prizes/关闭.png" alt="关闭" class="rules-close-btn" onclick="closeModal('rulesModal')">
                 <div class="rules-inner">
-                    <img src="../活动规则/活动规则与说明.png" alt="活动规则与说明" class="rules-title-img">
+                    <img src="rules/活动规则与说明.png" alt="活动规则与说明" class="rules-title-img">
                     <div class="rules-content">
                         <div class="rules-item">
                             <div class="rules-number">1</div>
