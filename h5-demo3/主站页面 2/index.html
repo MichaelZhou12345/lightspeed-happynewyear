@@ -838,7 +838,7 @@
             <img src="interact2/join-group-benefits-text.png" alt="进群获取更多福利与资讯" class="interact-group-text">
             
             <!-- 一键进群按钮 -->
-            <img src="interact2/join-group.png" alt="一键进群" class="interact-group-btn">
+            <img src="interact2/join-group.png" alt="一键进群" class="interact-group-btn" onclick="window.open('https://static.gamecenter.qq.com/social-web/sop/join-qgroup/index.html?appid=102806707&space_id=ozen7t8wkl&isDev=0&tag=%E5%91%A8%E5%B9%B4%E5%BA%86&open_mode=view_external', '_blank')">
         </div>
         
         <!-- 全屏背景使用loading页面的背景 -->
@@ -854,7 +854,7 @@
         <!-- 寄语弹窗 -->
         <div class="message-modal-overlay" id="messageModal">
             <img src="message-popup/message-popup.png" alt="寄语弹窗" class="message-modal-img">
-            <img src="message-popup/share-blessing.png" alt="分享祝福" class="message-share-btn">
+            <img src="message-popup/share-blessing.png" alt="分享祝福" class="message-share-btn" onclick="showShareModal()">
             <button class="message-win-btn" onclick="showWinModal()">中奖了</button>
         </div>
         
@@ -863,6 +863,13 @@
             <div class="win-modal-content">
                 <img src="winning/winning.png" alt="中奖画面" class="win-modal-img" onclick="closeWinModal()">
                 <div class="win-code">中奖码：XXXXXXXX</div>
+            </div>
+        </div>
+        
+        <!-- 分享弹窗 -->
+        <div class="share-modal-overlay" id="shareModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 3200;" onclick="closeShareModal()">
+            <div style="max-width: 393px; width: 100%; margin: 0 auto; padding: 80px 40px 0;">
+                <img src="sharing/sharing.png" alt="分享" style="width: 100%; height: auto;">
             </div>
         </div>
     </div>
@@ -1026,6 +1033,16 @@
         // 关闭寄语弹窗
         function closeMessageModal() {
             document.getElementById('messageModal').classList.remove('active');
+        }
+
+        // 显示分享弹窗
+        function showShareModal() {
+            document.getElementById('shareModal').style.display = 'flex';
+        }
+
+        // 关闭分享弹窗
+        function closeShareModal() {
+            document.getElementById('shareModal').style.display = 'none';
         }
 
         // 显示中奖弹窗
